@@ -1,5 +1,5 @@
 ---
-description: Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a review
+description: Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a PR comment
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -24,11 +24,8 @@ tools:
   edit:
   bash: ["*"]
 safe-outputs:
-  create-pull-request-review-comment:
-    max: 10
-  submit-pull-request-review:
+  add-comment:
     max: 1
-    allowed-events: [COMMENT]
 steps:
   - name: Validate trusted release pin
     env:
@@ -87,7 +84,7 @@ steps:
         echo "NFV_MODEL=$NFV_MODEL"
         echo "NFV_OUT=/tmp/gh-aw/sandbox/agent/logs/nfv-evidence"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461
+source: microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7
 ---
 
 # NFV PR reviewer
@@ -125,16 +122,11 @@ Dafny, allows six syntax repairs and ten annotation-only repairs, and prints a
 JSON summary. You cannot decide whether a finding is accepted; only the command
 does.
 
-## 3. Post the review
+## 3. Post the report
 
-If the summary has no `review` path, call `noop` with the finding and
-abstention counts. Otherwise:
-
-- For each entry of the `comments` JSON file, call
-  `create_pull_request_review_comment` with its `path`, `line`, `side`, and
-  `body` copied verbatim.
-- Then call `submit_pull_request_review` once with event `COMMENT` and the
-  `review` file's content verbatim as the body.
+If the summary has no `comment` path, call `noop` with the finding and
+abstention counts. Otherwise call `add_comment` once on this PR with the
+`comment` file's content verbatim as the body.
 
 Never edit, summarize, or add to the generated text. Findings are conditional
 MODEL refutations, never source-confirmed bugs.
