@@ -124,7 +124,9 @@ steps:
   - name: Install collection-only plugin
     run: python -m pip install ./nfv-plugin/workflow
   - name: Initialize empty workspace repository (no PR code is checked out)
-    run: git init -q "$GITHUB_WORKSPACE"
+    run: |
+      git init -q "$GITHUB_WORKSPACE"
+      git -C "$GITHUB_WORKSPACE" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
   - name: Capture immutable source as untrusted text
     env:
       GH_TOKEN: ${{ github.token }}
