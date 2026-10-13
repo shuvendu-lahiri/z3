@@ -135,7 +135,7 @@ steps:
     run: nfv-workflow collect --event "$GITHUB_EVENT_PATH" --out nfv-bundle.json --sources-dir nfv-src
 ---
 
-# Merged-PR conditional neuro-formal verification
+# Merged-PR neuro-formal verification audit
 
 This is a prototype implementation of the NFV merged-PR integration. It runs
 only when a pull request is merged; PRs closed without merging are skipped.
