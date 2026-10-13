@@ -22,9 +22,7 @@ tools:
   github:
     toolsets: [pull_requests]
   edit:
-  bash:
-    - cat
-    - nfv-workflow audit
+  bash: ["*"]
 safe-outputs:
   create-pull-request-review-comment:
     max: 10
@@ -89,7 +87,7 @@ steps:
         echo "NFV_MODEL=$NFV_MODEL"
         echo "NFV_OUT=/tmp/gh-aw/sandbox/agent/logs/nfv-evidence"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@04c7c3ecc467b62540baced58b48cc95e3dc460f
+source: microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461
 ---
 
 # NFV PR reviewer
