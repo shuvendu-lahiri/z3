@@ -1,5 +1,5 @@
-# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"d74f10eb29b8b914d3b86d35cef8fd35b4f162f40a771edf9aa21ab797078e82","body_hash":"06292ee9df9032b443ee4fb1c3fb418062766a608e896476769fedb349db0ce2","compiler_version":"v0.88.7","strict":true,"agent_id":"copilot","agent_model":"${{ vars.NFV_MODEL }}","engine_versions":{"copilot":"1.0.80"}}
-# gh-aw-manifest: {"version":1,"secrets":["COPILOT_GITHUB_TOKEN","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN","NFV_RELEASE_TOKEN"],"actions":[{"repo":"actions/cache/restore","sha":"55cc8345863c7cc4c66a329aec7e433d2d1c52a9","version":"v6.1.0"},{"repo":"actions/cache/save","sha":"55cc8345863c7cc4c66a329aec7e433d2d1c52a9","version":"v6.1.0"},{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"3d3c42e5aac5ba805825da76410c181273ba90b1"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-dotnet","sha":"a98b56852c35b8e3190ac28c8c2271da59106c68","version":"a98b56852c35b8e3190ac28c8c2271da59106c68"},{"repo":"actions/setup-node","sha":"820762786026740c76f36085b0efc47a31fe5020","version":"v7.0.0"},{"repo":"actions/setup-python","sha":"5fda3b95a4ea91299a34e894583c3862153e4b97","version":"v7.0.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"5e508589e03a7757a7e05b26e834292f5445bfb6","version":"v0.88.7"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.14","digest":"sha256:f7df036c86575527b61f3f7df91c4412349a12b2a74988d929eafa2999230c98","pinned_image":"ghcr.io/github/gh-aw-firewall/agent:0.28.14@sha256:f7df036c86575527b61f3f7df91c4412349a12b2a74988d929eafa2999230c98"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.14","digest":"sha256:6f95e2234dd9bd6333a8ff28ccea7ecf0204acd4a09108723844dbd2bf6268c5","pinned_image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.14@sha256:6f95e2234dd9bd6333a8ff28ccea7ecf0204acd4a09108723844dbd2bf6268c5"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.14","digest":"sha256:2ce8df3abf3e9b76e9c0cf5863da41f1ab3f89b20ad14b988806ab89e7bf2cd5","pinned_image":"ghcr.io/github/gh-aw-firewall/squid:0.28.14@sha256:2ce8df3abf3e9b76e9c0cf5863da41f1ab3f89b20ad14b988806ab89e7bf2cd5"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.18","digest":"sha256:85b940556a8faa4e1fdbef124bfd75f2c4ebd855a10b88a1c3b6f3e97f6f1a53","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.18@sha256:85b940556a8faa4e1fdbef124bfd75f2c4ebd855a10b88a1c3b6f3e97f6f1a53"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23","pinned_image":"ghcr.io/github/gh-aw-node@sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23"},{"image":"ghcr.io/github/github-mcp-server:v1.11.0","digest":"sha256:fbec75de11c255213fa08d80fb166abe73d851fff631c51c0079872967720699","pinned_image":"ghcr.io/github/github-mcp-server:v1.11.0@sha256:fbec75de11c255213fa08d80fb166abe73d851fff631c51c0079872967720699"}],"has_pull_request":true,"mcp_servers":[{"name":"github","tools":["get_pull_request","get_pull_request_comments","get_pull_request_diff","get_pull_request_files","get_pull_request_review_comments","get_pull_request_reviews","get_pull_request_status","list_pull_requests","pull_request_read","search_pull_requests"]},{"name":"safeoutputs","tools":["create_pull_request_review_comment","missing_data","missing_tool","noop","submit_pull_request_review"]}]}
+# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"d6a789bce382784f093b37cf1046f5d530885ed1b3896be9c307e020db7bfc70","body_hash":"58211c1f71f5a5812e8af784df84f099a0be0a2dbfd5f587a01e17bafb61aced","compiler_version":"v0.88.7","strict":true,"agent_id":"copilot","agent_model":"${{ vars.NFV_MODEL }}","engine_versions":{"copilot":"1.0.80"}}
+# gh-aw-manifest: {"version":1,"secrets":["COPILOT_GITHUB_TOKEN","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN","NFV_RELEASE_TOKEN"],"actions":[{"repo":"actions/cache/restore","sha":"55cc8345863c7cc4c66a329aec7e433d2d1c52a9","version":"v6.1.0"},{"repo":"actions/cache/save","sha":"55cc8345863c7cc4c66a329aec7e433d2d1c52a9","version":"v6.1.0"},{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"3d3c42e5aac5ba805825da76410c181273ba90b1"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-dotnet","sha":"a98b56852c35b8e3190ac28c8c2271da59106c68","version":"a98b56852c35b8e3190ac28c8c2271da59106c68"},{"repo":"actions/setup-node","sha":"820762786026740c76f36085b0efc47a31fe5020","version":"v7.0.0"},{"repo":"actions/setup-python","sha":"5fda3b95a4ea91299a34e894583c3862153e4b97","version":"v7.0.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"5e508589e03a7757a7e05b26e834292f5445bfb6","version":"v0.88.7"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.14","digest":"sha256:f7df036c86575527b61f3f7df91c4412349a12b2a74988d929eafa2999230c98","pinned_image":"ghcr.io/github/gh-aw-firewall/agent:0.28.14@sha256:f7df036c86575527b61f3f7df91c4412349a12b2a74988d929eafa2999230c98"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.14","digest":"sha256:6f95e2234dd9bd6333a8ff28ccea7ecf0204acd4a09108723844dbd2bf6268c5","pinned_image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.14@sha256:6f95e2234dd9bd6333a8ff28ccea7ecf0204acd4a09108723844dbd2bf6268c5"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.14","digest":"sha256:2ce8df3abf3e9b76e9c0cf5863da41f1ab3f89b20ad14b988806ab89e7bf2cd5","pinned_image":"ghcr.io/github/gh-aw-firewall/squid:0.28.14@sha256:2ce8df3abf3e9b76e9c0cf5863da41f1ab3f89b20ad14b988806ab89e7bf2cd5"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.18","digest":"sha256:85b940556a8faa4e1fdbef124bfd75f2c4ebd855a10b88a1c3b6f3e97f6f1a53","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.18@sha256:85b940556a8faa4e1fdbef124bfd75f2c4ebd855a10b88a1c3b6f3e97f6f1a53"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23","pinned_image":"ghcr.io/github/gh-aw-node@sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23"},{"image":"ghcr.io/github/github-mcp-server:v1.11.0","digest":"sha256:fbec75de11c255213fa08d80fb166abe73d851fff631c51c0079872967720699","pinned_image":"ghcr.io/github/github-mcp-server:v1.11.0@sha256:fbec75de11c255213fa08d80fb166abe73d851fff631c51c0079872967720699"}],"has_pull_request":true,"mcp_servers":[{"name":"github","tools":["get_pull_request","get_pull_request_comments","get_pull_request_diff","get_pull_request_files","get_pull_request_review_comments","get_pull_request_reviews","get_pull_request_status","list_pull_requests","pull_request_read","search_pull_requests"]},{"name":"safeoutputs","tools":["add_comment","missing_data","missing_tool","noop"]}]}
 # This file was automatically generated by gh-aw (v0.88.7). DO NOT EDIT. To debug this workflow, load the skill at https://github.com/github/gh-aw/blob/main/debug.md
 #
 #    ___                   _   _
@@ -17,15 +17,15 @@
 #  \/  \/ \___/|_| |_|\_\|_| |_|\___/ \_/\_/ |___/
 #
 #
-# To update this file, edit microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461 and run:
+# To update this file, edit microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7 and run:
 #   gh aw compile
 # Not all edits will cause changes to this file.
 #
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
-# Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a review
+# Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a PR comment
 #
-# Source: microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461
+# Source: microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7
 #
 # Secrets used:
 #   - COPILOT_GITHUB_TOKEN
@@ -153,7 +153,7 @@ jobs:
           GH_AW_INFO_AWMG_VERSION: ""
           GH_AW_INFO_FIREWALL_TYPE: "squid"
           GH_AW_INFO_AGENT_RUNTIME: ""
-          GH_AW_INFO_FRONTMATTER_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
+          GH_AW_INFO_FRONTMATTER_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
           GH_AW_INFO_BODY_MODIFIED: "false"
           GH_AW_COMPILED_STRICT: "true"
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -302,7 +302,7 @@ jobs:
           GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
           GH_AW_GITHUB_WORKSPACE: ${{ github.workspace }}
           GH_AW_PROMPT_CONTENT_0000: "<system>\n"
-          GH_AW_PROMPT_CONTENT_0001: "<safe-output-tools>\nTools: create_pull_request_review_comment(max:10), submit_pull_request_review, missing_tool, missing_data, noop\n"
+          GH_AW_PROMPT_CONTENT_0001: "<safe-output-tools>\nTools: add_comment, missing_tool, missing_data, noop\n"
           GH_AW_PROMPT_CONTENT_0002: "</safe-output-tools>\n"
           GH_AW_PROMPT_CONTENT_0003: "<github-context>\nThe following GitHub context information is available for this workflow:\n{{#if github.actor}}\n- **actor**: __GH_AW_GITHUB_ACTOR__\n{{/if}}\n{{#if github.repository}}\n- **repository**: __GH_AW_GITHUB_REPOSITORY__\n{{/if}}\n{{#if github.workspace}}\n- **workspace**: __GH_AW_GITHUB_WORKSPACE__\n{{/if}}\n{{#if github.event.issue.number || (github.aw.context.item_type == 'issue' && github.aw.context.item_number)}}\n- **issue-number**: #__GH_AW_EXPR_802A9F6A__\n{{/if}}\n{{#if github.event.discussion.number || (github.aw.context.item_type == 'discussion' && github.aw.context.item_number)}}\n- **discussion-number**: #__GH_AW_EXPR_1A3A194A__\n{{/if}}\n{{#if github.event.pull_request.number || (github.aw.context.item_type == 'pull_request' && github.aw.context.item_number)}}\n- **pull-request-number**: #__GH_AW_EXPR_463A214A__\n{{/if}}\n{{#if github.event.comment.id || github.aw.context.comment_id}}\n- **comment-id**: __GH_AW_EXPR_FF1D34CE__\n{{/if}}\n{{#if github.run_id}}\n- **workflow-run-id**: __GH_AW_GITHUB_RUN_ID__\n{{/if}}\n</github-context>\n\n"
           GH_AW_PROMPT_CONTENT_0004: "</system>\n"
@@ -574,7 +574,7 @@ jobs:
         env:
           GH_AW_FILE_ROOT: "${{ runner.temp }}/gh-aw"
           GH_AW_FILE_CONFIG: "{\"files\":[{\"path\":\"safeoutputs/config.json\",\"content_env\":\"GH_AW_SAFE_OUTPUTS_CONFIG\"}]}"
-          GH_AW_SAFE_OUTPUTS_CONFIG: "{\"create_pull_request_review_comment\":{\"max\":10,\"side\":\"RIGHT\"},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{},\"submit_pull_request_review\":{\"allowed_events\":[\"COMMENT\"],\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_CONFIG: "{\"add_comment\":{\"max\":1},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{}}"
         with:
           script: |
             const path = require('path');
@@ -588,29 +588,14 @@ jobs:
           GH_AW_TOOLS_META_JSON: |
             {
               "description_suffixes": {
-                "create_pull_request_review_comment": " CONSTRAINTS: Maximum 10 review comment(s) can be created. Comments will be on the RIGHT side of the diff.",
-                "submit_pull_request_review": " CONSTRAINTS: Maximum 1 review(s) can be submitted."
+                "add_comment": " CONSTRAINTS: Maximum 1 comment(s) can be added. Supports reply_to_id for discussion threading."
               },
               "repo_params": {},
-              "dynamic_tools": [],
-              "property_injections": {
-                "submit_pull_request_review": {
-                  "event": {
-                    "description": "Review decision. Restricted by allowed-events configuration to: COMMENT.",
-                    "enum": [
-                      "COMMENT"
-                    ],
-                    "type": "string",
-                    "x-synonyms": [
-                      "action"
-                    ]
-                  }
-                }
-              }
+              "dynamic_tools": []
             }
           GH_AW_VALIDATION_JSON: |
             {
-              "create_pull_request_review_comment": {
+              "add_comment": {
                 "defaultMax": 1,
                 "fields": {
                   "body": {
@@ -619,33 +604,37 @@ jobs:
                     "sanitize": true,
                     "maxLength": 65000
                   },
-                  "line": {
-                    "required": true,
-                    "positiveInteger": true
-                  },
-                  "path": {
-                    "required": true,
-                    "type": "string"
-                  },
-                  "pull_request_number": {
+                  "comment_id": {
                     "optionalPositiveInteger": true
+                  },
+                  "item_number": {
+                    "issueOrPRNumber": true
+                  },
+                  "pr": {
+                    "issueOrPRNumber": true
+                  },
+                  "pr_number": {
+                    "issueOrPRNumber": true
+                  },
+                  "reply_to_id": {
+                    "type": "string",
+                    "maxLength": 256
                   },
                   "repo": {
                     "type": "string",
                     "maxLength": 256
                   },
-                  "side": {
+                  "target": {
                     "type": "string",
                     "enum": [
-                      "LEFT",
-                      "RIGHT"
+                      "status"
                     ]
                   },
-                  "start_line": {
-                    "optionalPositiveInteger": true
+                  "temporary_id": {
+                    "type": "string",
+                    "pattern": "^#?aw_[A-Za-z0-9_]{3,12}$"
                   }
-                },
-                "customValidation": "startLineLessOrEqualLine"
+                }
               },
               "missing_data": {
                 "defaultMax": 20,
@@ -717,31 +706,6 @@ jobs:
                     "type": "string",
                     "sanitize": true,
                     "maxLength": 1024
-                  }
-                }
-              },
-              "submit_pull_request_review": {
-                "defaultMax": 1,
-                "fields": {
-                  "body": {
-                    "type": "string",
-                    "sanitize": true,
-                    "maxLength": 65000
-                  },
-                  "event": {
-                    "type": "string",
-                    "enum": [
-                      "APPROVE",
-                      "REQUEST_CHANGES",
-                      "COMMENT"
-                    ]
-                  },
-                  "pull_request_number": {
-                    "issueOrPRNumber": true
-                  },
-                  "repo": {
-                    "type": "string",
-                    "maxLength": 256
                   }
                 }
               }
@@ -1329,8 +1293,8 @@ jobs:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: "1"
           GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_NOOP_REPORT_AS_ISSUE: "false"
@@ -1353,8 +1317,8 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
           GH_AW_DETECTION_REASON: ${{ needs.detection.outputs.detection_reason }}
@@ -1374,8 +1338,8 @@ jobs:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_MISSING_TOOL_CREATE_ISSUE: "true"
           GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1392,8 +1356,8 @@ jobs:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_REPORT_INCOMPLETE_CREATE_ISSUE: "true"
           GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1410,8 +1374,8 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_WORKFLOW_ID: "nfv-pr-review"
@@ -1462,8 +1426,8 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+          GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_REPORT_FAILED_JOBS: "true"
         with:
@@ -1572,7 +1536,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           WORKFLOW_NAME: "NFV PR reviewer"
-          WORKFLOW_DESCRIPTION: "Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a review"
+          WORKFLOW_DESCRIPTION: "Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a PR comment"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
           GH_AW_DETECTION_CONTINUE_ON_ERROR: "true"
           GH_AW_DETECTION_SKIP_PROMPT_SUMMARY: "true"
@@ -1641,7 +1605,7 @@ jobs:
           RUNNER_TEMP: ${{ runner.temp }}
           TRACEPARENT: ${{ env.GITHUB_AW_OTEL_TRACE_ID != '' && env.GITHUB_AW_OTEL_PARENT_SPAN_ID != '' && format('00-{0}-{1}-01', env.GITHUB_AW_OTEL_TRACE_ID, env.GITHUB_AW_OTEL_PARENT_SPAN_ID) || '' }}
           WORKFLOW_NAME: "NFV PR reviewer"
-          WORKFLOW_DESCRIPTION: "Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a review"
+          WORKFLOW_DESCRIPTION: "Prototype NFV PR reviewer — Dafny refutations of a PR's intended properties, posted as a PR comment"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
           GH_AW_DETECTION_CONTINUE_ON_ERROR: "true"
         run: |
@@ -1809,11 +1773,13 @@ jobs:
       GH_AW_THREAT_DETECTION_AIC: ${{ needs.detection.outputs.aic }}
       GH_AW_WORKFLOW_ID: "nfv-pr-review"
       GH_AW_WORKFLOW_NAME: "NFV PR reviewer"
-      GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@960567c3bdc6e4f0aff27408a76304c6d805a461"
-      GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/960567c3bdc6e4f0aff27408a76304c6d805a461/workflow"
+      GH_AW_WORKFLOW_SOURCE: "microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7"
+      GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/microsoft/neuro-formal-verification/blob/f660f0d7cd7bbab5cb0123781e49386264b893f7/workflow"
     outputs:
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
       code_push_failure_errors: ${{ steps.process_safe_outputs.outputs.code_push_failure_errors }}
+      comment_id: ${{ steps.process_safe_outputs.outputs.comment_id }}
+      comment_url: ${{ steps.process_safe_outputs.outputs.comment_url }}
       create_discussion_error_count: ${{ steps.process_safe_outputs.outputs.create_discussion_error_count }}
       create_discussion_errors: ${{ steps.process_safe_outputs.outputs.create_discussion_errors }}
       process_safe_outputs_items_applied: ${{ steps.process_safe_outputs.outputs.items_applied }}
@@ -1879,7 +1845,7 @@ jobs:
           GH_AW_ALLOWED_DOMAINS: "api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,ppa.launchpad.net,s.symcb.com,s.symcd.com,security.ubuntu.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.googleapis.com"
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request_review_comment\":{\"max\":10,\"side\":\"RIGHT\"},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{},\"submit_pull_request_review\":{\"allowed_events\":[\"COMMENT\"],\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
