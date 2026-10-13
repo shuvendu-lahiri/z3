@@ -123,6 +123,8 @@ steps:
       python-version: "3.12"
   - name: Install collection-only plugin
     run: python -m pip install ./nfv-plugin/workflow
+  - name: Initialize empty workspace repository (no PR code is checked out)
+    run: git init -q "$GITHUB_WORKSPACE"
   - name: Capture immutable source as untrusted text
     env:
       GH_TOKEN: ${{ github.token }}
