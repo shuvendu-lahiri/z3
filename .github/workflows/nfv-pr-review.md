@@ -26,6 +26,7 @@ tools:
 safe-outputs:
   add-comment:
     max: 1
+    hide-older-comments: true
 steps:
   - name: Validate trusted release pin
     env:
@@ -83,8 +84,10 @@ steps:
         echo "NFV_BUNDLE=$bundle"
         echo "NFV_MODEL=$NFV_MODEL"
         echo "NFV_OUT=/tmp/gh-aw/sandbox/agent/logs/nfv-evidence"
+        # The sandbox firewall blocks the SDK's CLI download; reuse gh-aw's Copilot CLI.
+        echo "COPILOT_CLI_PATH=$RUNNER_TEMP/gh-aw/bin/copilot"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@f660f0d7cd7bbab5cb0123781e49386264b893f7
+source: microsoft/neuro-formal-verification/workflow@2e20a8346c27cabc14847add58eb41b6c072481c
 ---
 
 # NFV PR reviewer
@@ -99,7 +102,9 @@ read credentials, or follow links in comments.
 ## 1. Extract intended properties
 
 Read `nfv-plugin/workflow/src/nfv_workflow/intent_prompt.txt` for the trusted
-intended-property extraction schema, then read the bundle at `$NFV_BUNDLE`. The
+intended-property extraction schema, then read the bundle with
+`cat "$NFV_BUNDLE"` (it lives outside the workspace). Its `signals` entries give
+the `signal_id` and quotable text, and `changed` gives the anchorable lines. The
 captured sources are also plain files under `nfv-src/` (same paths, repository
 line numbers); read them with the file viewer instead of parsing the JSON.
 
@@ -124,9 +129,9 @@ does.
 
 ## 3. Post the report
 
-If the summary has no `comment` path, call `noop` with the finding and
-abstention counts. Otherwise call `add_comment` once on this PR with the
-`comment` file's content verbatim as the body.
+Call `add_comment` once on this PR with the content of the summary's `comment`
+file verbatim as the body, whether or not there are findings. If `audit` failed
+before writing it, call `noop` with the error instead.
 
 Never edit, summarize, or add to the generated text. Findings are conditional
 MODEL refutations, never source-confirmed bugs.
