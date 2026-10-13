@@ -9,7 +9,9 @@ permissions:
   contents: read
   pull-requests: read
   issues: read
-engine: copilot
+engine:
+  id: copilot
+  model: ${{ vars.NFV_MODEL }}
 checkout: false
 concurrency:
   group: nfv-merged-pr-${{ github.repository }}-${{ github.event.pull_request.number }}
