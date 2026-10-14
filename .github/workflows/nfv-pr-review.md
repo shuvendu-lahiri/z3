@@ -11,7 +11,7 @@ permissions:
 engine:
   id: copilot
   model: ${{ vars.NFV_MODEL }}
-timeout-minutes: 120
+timeout-minutes: 240
 checkout: false
 concurrency:
   group: nfv-pr-review-${{ github.repository }}-${{ github.event.pull_request.number }}
@@ -76,6 +76,10 @@ steps:
     env:
       GH_TOKEN: ${{ github.token }}
       NFV_MODEL: ${{ vars.NFV_MODEL }}
+      NFV_SYNTAX_ROUNDS: ${{ vars.NFV_SYNTAX_ROUNDS }}
+      NFV_PROOF_ROUNDS: ${{ vars.NFV_PROOF_ROUNDS }}
+      NFV_VERIFIER_TIMEOUT: ${{ vars.NFV_VERIFIER_TIMEOUT }}
+      NFV_PROPERTY_SECONDS: ${{ vars.NFV_PROPERTY_SECONDS }}
     run: |
       set -euo pipefail
       bundle="$RUNNER_TEMP/gh-aw/nfv/bundle.json"
@@ -83,11 +87,16 @@ steps:
       {
         echo "NFV_BUNDLE=$bundle"
         echo "NFV_MODEL=$NFV_MODEL"
+        # Optional repair/time budget; empty values keep the audit defaults.
+        echo "NFV_SYNTAX_ROUNDS=$NFV_SYNTAX_ROUNDS"
+        echo "NFV_PROOF_ROUNDS=$NFV_PROOF_ROUNDS"
+        echo "NFV_VERIFIER_TIMEOUT=$NFV_VERIFIER_TIMEOUT"
+        echo "NFV_PROPERTY_SECONDS=$NFV_PROPERTY_SECONDS"
         echo "NFV_OUT=/tmp/gh-aw/sandbox/agent/logs/nfv-evidence"
         # The sandbox firewall blocks the SDK's CLI download; reuse gh-aw's Copilot CLI.
         echo "COPILOT_CLI_PATH=$RUNNER_TEMP/gh-aw/bin/copilot"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@bf6f338aa1f6fb21b3b7d7ed20df49d348285239
+source: microsoft/neuro-formal-verification/workflow@d6eaefa577bb2d13046f3c4cc7392841cb8b2c2d
 ---
 
 # NFV PR reviewer
@@ -116,16 +125,17 @@ Rust source all use Dafny only. Write the JSON array to `nfv-proposals.json`
 
 ## 2. Refute them with Dafny
 
-Run exactly once, and wait for it to exit (it can take over an hour):
+Run exactly once, without changing its environment, and wait for it to exit
+(it can take a few hours):
 
 ```
 nfv-workflow audit --proposals nfv-proposals.json
 ```
 
 It translates each property, checks only its negation on a concrete input with
-Dafny, allows six syntax repairs and ten annotation-only repairs, and prints a
-JSON summary. You cannot decide whether a finding is accepted; only the command
-does.
+Dafny, allows the configured number of syntax and annotation-only repairs, and
+prints a JSON summary. You cannot decide whether a finding is accepted; only the
+command does.
 
 ## 3. Post the report
 
