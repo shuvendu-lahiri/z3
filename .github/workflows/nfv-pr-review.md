@@ -13,6 +13,8 @@ engine:
   model: ${{ vars.NFV_MODEL }}
   copilot-sdk: true
   driver: nfv-plugin/workflow/sandbox_driver.cjs
+  env:
+    GH_AW_HARNESS_MAX_RETRIES: "0"
 timeout-minutes: 360
 checkout: false
 concurrency:
@@ -128,7 +130,7 @@ post-steps:
       name: nfv-evidence
       path: /tmp/gh-aw/sandbox/agent/logs/nfv
       if-no-files-found: warn
-source: microsoft/neuro-formal-verification/workflow@02f28b682764056c4bd4878d25c97765dc4d11cf
+source: microsoft/neuro-formal-verification/workflow@102aaf21b2f66f3a17d57020b9e26bda31ca5000
 ---
 
 # NFV PR reviewer
