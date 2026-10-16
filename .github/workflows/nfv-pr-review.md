@@ -123,7 +123,7 @@ steps:
         # The sandbox firewall blocks the SDK's CLI download; reuse gh-aw's Copilot CLI.
         echo "COPILOT_CLI_PATH=$RUNNER_TEMP/gh-aw/bin/copilot"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@c946df798856aabe434919079ea9f03558a3d60f
+source: microsoft/neuro-formal-verification/workflow@63111d5a67d0fb09de3461f9d0bfefa485a5a0c0
 ---
 
 # NFV PR reviewer
@@ -156,6 +156,13 @@ Postulate at most ten distinct nontrivial properties from PR intent and changed
 code/comments, using captured preconditions, declarations and the preceding
 repository-context session's source to understand them. Skip properties that
 are obvious directly from a single assignment or unconditional operation.
+Prefer changed implementation functions; use tests and callers as evidence of
+intention. Do not select a test/caller expectation about a callee's correctness
+while treating that callee's result as an unconstrained input. Such a check
+only admits invented environment responses, not behavior of the changed
+implementation. Select the owning changed implementation and its meaningful
+control/data-flow property instead. This does not exclude properties of the
+caller's own logic that hold independently of an unspecified callee result.
 Split conjunctive claims into separate atomic properties within the ten-property
 selection budget.
 Select one exact `function_id` from `function_catalog.functions` per property.
