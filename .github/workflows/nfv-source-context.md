@@ -104,7 +104,7 @@ post-steps:
       name: nfv-source-context-validated
       path: nfv-context-validated/context.json
       if-no-files-found: error
-source: microsoft/neuro-formal-verification/workflow@837736100dded56e4f964d9290e717bf7a76481e
+source: microsoft/neuro-formal-verification/workflow@154397039b483927b50910cb3609373efd8c2681
 ---
 
 # Source-context session
@@ -130,7 +130,12 @@ Write `nfv-context.json` in the workspace:
 ```
 
 Select at most 16 regular source files and at most 8 relevant identifiers per
-file. Prefer dependencies actually used by the changed functions; include
+file. Prefer unqualified identifier names, each at most 128 characters.
+C++ `::`-qualified names and operator names such as `operator()` or `operator|=`
+are also accepted: trusted code normalizes them to the unqualified names used
+by lexical lookup (operator overloads use `operator`).
+Do not include argument lists, template arguments or other expressions.
+Prefer dependencies actually used by the changed functions; include
 classes, constructor validation, constant tables and helper implementations
 whose behavior is needed, not unrelated same-named declarations. Include
 already-captured files when additional symbols in them matter. Use repository
