@@ -74,6 +74,10 @@ steps:
       persist-credentials: false
       submodules: false
       lfs: false
+  - name: Initialize empty workspace repository (no PR code is checked out)
+    run: |
+      git init -q "$GITHUB_WORKSPACE"
+      git -C "$GITHUB_WORKSPACE" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
   - name: Capture immutable PR changes as data
     env:
       GH_TOKEN: ${{ github.token }}
@@ -100,7 +104,7 @@ post-steps:
       name: nfv-source-context-validated
       path: nfv-context-validated/context.json
       if-no-files-found: error
-source: microsoft/neuro-formal-verification/workflow@05757b8ac6af60616cbbe7dcbdae0b5f37286fe2
+source: microsoft/neuro-formal-verification/workflow@837736100dded56e4f964d9290e717bf7a76481e
 ---
 
 # Source-context session

@@ -125,7 +125,7 @@ steps:
         # The sandbox firewall blocks the SDK's CLI download; reuse gh-aw's Copilot CLI.
         echo "COPILOT_CLI_PATH=$RUNNER_TEMP/gh-aw/bin/copilot"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@05757b8ac6af60616cbbe7dcbdae0b5f37286fe2
+source: microsoft/neuro-formal-verification/workflow@837736100dded56e4f964d9290e717bf7a76481e
 ---
 
 # NFV PR reviewer
