@@ -15,6 +15,9 @@ engine:
   driver: nfv-plugin/workflow/sandbox_driver.cjs
   env:
     GH_AW_HARNESS_MAX_RETRIES: "0"
+max-turns: 500
+# Independent, tool-free sessions need not reuse a cached prompt.
+max-turn-cache-misses: 500
 timeout-minutes: 360
 checkout: false
 concurrency:
@@ -130,7 +133,7 @@ post-steps:
       name: nfv-evidence
       path: /tmp/gh-aw/sandbox/agent/logs/nfv
       if-no-files-found: warn
-source: microsoft/neuro-formal-verification/workflow@102aaf21b2f66f3a17d57020b9e26bda31ca5000
+source: microsoft/neuro-formal-verification/workflow@0e65e685f1f3cca3af504cee7897a7a07590e038
 ---
 
 # NFV PR reviewer
