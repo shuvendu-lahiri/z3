@@ -104,7 +104,7 @@ post-steps:
       name: nfv-source-context-validated
       path: nfv-context-validated/context.json
       if-no-files-found: error
-source: microsoft/neuro-formal-verification/workflow@102aaf21b2f66f3a17d57020b9e26bda31ca5000
+source: microsoft/neuro-formal-verification/workflow@0e65e685f1f3cca3af504cee7897a7a07590e038
 ---
 
 # Source-context session
