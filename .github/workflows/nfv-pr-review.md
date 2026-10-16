@@ -11,7 +11,7 @@ permissions:
 engine:
   id: copilot
   model: ${{ vars.NFV_MODEL }}
-timeout-minutes: 240
+timeout-minutes: 360
 checkout: false
 concurrency:
   group: nfv-pr-review-${{ github.repository }}-${{ github.event.pull_request.number }}
@@ -106,11 +106,9 @@ steps:
       import json
       import sys
       from pathlib import Path
+      from nfv_workflow.cli import input_index
       bundle = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-      index = {key: bundle[key] for key in ("identity", "signals", "changed")}
-      index["repository_context"] = bundle.get("repository_context", [])
-      index["captured_paths"] = sorted(bundle["sources"])
-      index["context_omissions"] = bundle.get("context_omissions", [])
+      index = input_index(bundle)
       Path("nfv-input.json").write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding="utf-8", newline="\n")
       PY
       {
@@ -125,7 +123,7 @@ steps:
         # The sandbox firewall blocks the SDK's CLI download; reuse gh-aw's Copilot CLI.
         echo "COPILOT_CLI_PATH=$RUNNER_TEMP/gh-aw/bin/copilot"
       } >> "$GITHUB_ENV"
-source: microsoft/neuro-formal-verification/workflow@80f7139351ab90c116c28cad076da93ed7a515dc
+source: microsoft/neuro-formal-verification/workflow@c946df798856aabe434919079ea9f03558a3d60f
 ---
 
 # NFV PR reviewer
@@ -158,8 +156,14 @@ Postulate at most ten distinct nontrivial properties from PR intent and changed
 code/comments, using captured preconditions, declarations and the preceding
 repository-context session's source to understand them. Skip properties that
 are obvious directly from a single assignment or unconditional operation.
-Choose one identifiable changed entry function per property; anchor executable
-lines in that function, not blank lines or unrelated function boundaries.
+Split conjunctive claims into separate atomic properties within the ten-property
+selection budget.
+Select one exact `function_id` from `function_catalog.functions` per property.
+The trusted extractor supplies its path and changed anchors; do not invent or
+count line numbers. Read that function's captured source before proposing its
+property. Source-inferred quotes must occur verbatim within that function;
+they need not themselves be changed lines. Inspect relevant captured files
+outside the PR payload as well; they remain available as repository context.
 C, C++, Java, C#, Go, JavaScript, TypeScript, Python, and
 Rust source all use Dafny only. Explicit behavioral claims in the PR description
 and commits are candidate intentions, even when they concern implementation
@@ -175,6 +179,10 @@ Run exactly once, without changing its environment, and wait for it to exit
 ```
 nfv-workflow audit --proposals nfv-proposals.json
 ```
+
+Long shell waits are not a failure or permission to end the review. Continue
+waiting on the same command until it exits; its JSON progress records identify
+completed properties. Do not stop it or publish a partial report.
 
 It translates each property, tries verification first, then refutation with
 Dafny, allows the configured number of syntax and annotation-only repairs, and
