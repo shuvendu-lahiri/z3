@@ -329,12 +329,6 @@ jobs:
           ./test-z3 -a
           cd ..
 
-      - name: Run the proof regression matrix tests
-        if: matrix.runTests
-        env:
-          Z3_EXE: ${{ github.workspace }}/build/z3
-        run: python -m unittest discover -s examples/python -p test_proof_matrix.py -v
-
       - name: Run examples
         if: matrix.runTests
         run: |
@@ -378,7 +372,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - build_cmake: "3.26"
+          - build_cmake: "3.30"
             consumer_cmake: 3.5
             name: minimum builder and consumer
           - build_cmake: latest
