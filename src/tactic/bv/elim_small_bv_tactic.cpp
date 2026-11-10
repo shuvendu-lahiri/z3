@@ -288,3 +288,4 @@ public:
 tactic * mk_elim_small_bv_tactic(ast_manager & m, params_ref const & p) {
     return clean(alloc(elim_small_bv_tactic, m, p));
 }
+

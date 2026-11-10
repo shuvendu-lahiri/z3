@@ -182,10 +182,6 @@ public:
     }
 
     void operator()(goal_ref const & g, goal_ref_buffer & result) override {
-        if (g->proofs_enabled()) {
-            result.push_back(g.get());
-            return;
-        }
         m_bounds.reset();
         m_mc.reset();
         expr_ref_vector axioms(m);

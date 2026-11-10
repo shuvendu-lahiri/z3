@@ -19,7 +19,6 @@ Notes:
 
 #include "solver/solver.h"
 #include "tactic/tactic.h"
-#include "tactic/tactical.h"
 #include "ast/converters/generic_model_converter.h"
 #include "solver/solver2tactic.h"
 #include "ast/ast_util.h"
