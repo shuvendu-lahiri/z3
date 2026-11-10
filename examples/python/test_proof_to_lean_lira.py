@@ -10,10 +10,13 @@
 ############################################
 import collections
 import copy
+import hashlib
 from pathlib import Path
 import random
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -23,7 +26,6 @@ _EXAMPLES = Path(__file__).resolve().parent
 sys.path.insert(0, str(_EXAMPLES))
 import proof_certificate
 import proof_clause_log
-import lean_test_support
 import proof_to_lean
 from test_proof_to_lean_lia import LIA_INPUTS, _STANDARD_AXIOMS, _hints, _parameters, _th_lemma_nodes, _z3_available
 
@@ -77,30 +79,7 @@ LIRA_INPUTS = {
 (assert (distinct n (- 1) 1))
 (check-sat)
 """,
-    # An Int ite over a Real condition: the farkas lemmas over the ite are
-    # Int steps, the condition's Real atoms not theirs.
-    "lira_int_ite_over_real_condition": """(set-logic QF_LIRA)
-(declare-const x Real)
-(declare-const y Real)
-(declare-const a Int)
-(declare-const b Int)
-(assert (< (+ (ite (> x y) a b) 1) a))
-(assert (< a (+ b 1)))
-(check-sat)
-""",
-    # A Real ite over an Int condition, the other way round.
-    "lira_real_ite_over_int_condition": """(set-logic QF_LIRA)
-(declare-const n Int)
-(declare-const m Int)
-(declare-const u Real)
-(declare-const v Real)
-(assert (< (+ (ite (> n m) u v) 1.0) u))
-(assert (< u (+ v 1.0)))
-(check-sat)
-""",
 }
-# The ite inputs whose conditions are over the other sort, with the ite's sort.
-_OTHER_SORT_CONDITIONS = {"lira_int_ite_over_real_condition": "Int", "lira_real_ite_over_int_condition": "Real"}
 
 
 # Documented inputs relating the sorts through to_real: theory lemmas over
@@ -375,13 +354,8 @@ def random_cast_instance(seed, variables=3, constraints=10):
 CAST_SEEDS = (11, 12, 25, 36)
 
 
-def random_mixed_instance(seed, variables=3, constraints=12, ites=0.0):
-    """A random QF_LIRA problem over Int and Real variables tied by Booleans, or None when it is satisfiable.
-
-    With ites, each variable of an atom is, with that probability, an ite
-    of it and another variable of its sort over an atom of the other sort.
-    Without, the generator draws as it did before the option existed.
-    """
+def random_mixed_instance(seed, variables=3, constraints=12):
+    """A random QF_LIRA problem over Int and Real variables tied by Booleans, or None when it is satisfiable."""
     generator = random.Random(seed)
     lines = ["(set-logic QF_LIRA)"]
     lines += ["(declare-const n%d Int)" % i for i in range(variables)]
@@ -392,17 +366,10 @@ def random_mixed_instance(seed, variables=3, constraints=12, ites=0.0):
         text = ("%d.%d" % (abs(value) // 2, 5 * (abs(value) % 2)) if real else "%d" % (abs(value) // 2))
         return text if value >= 0 else "(- %s)" % text
 
-    def variable(real, index, nested):
-        name = "%s%d" % ("x" if real else "n", index)
-        if nested or not ites or generator.random() >= ites:
-            return name
-        other = "%s%d" % ("x" if real else "n", generator.randrange(variables))
-        return "(ite %s %s %s)" % (atom(not real, True), name, other)
-
-    def atom(real, nested=False):
+    def atom(real):
         chosen = generator.sample(range(variables), generator.randint(1, 2))
-        terms = " ".join("(* %s %s)" % (numeral(2 * generator.choice([-3, -2, -1, 1, 2, 3]), False),
-                                        variable(real, v, nested)) for v in chosen)
+        terms = " ".join("(* %s %s%d)" % (numeral(2 * generator.choice([-3, -2, -1, 1, 2, 3]), False),
+                                          "x" if real else "n", v) for v in chosen)
         # Real bounds in halves, Int bounds whole, both within [-6, 6].
         bound = generator.randint(-12, 12) if real else 2 * generator.randint(-6, 6)
         return "(%s (+ %s) %s)" % (generator.choice(["<=", ">=", "<", ">", "="]), terms, numeral(bound, real))
@@ -467,12 +434,6 @@ def wide_mixed_rewrite_instance(variables=5, ites=False):
 # numerals included (see proof_clause_log._Terms.build), 17 has bound and
 # euf hints, 18 an Int cut, 21 a cnf lemma.
 MIXED_SEEDS = (12, 17, 18, 21)
-# Unsatisfiable seeds of random_mixed_instance with ites=0.3: on iteration
-# 87's macOS build each was rejected on both cores for an arithmetic step
-# over both Int and Real atoms (the atoms of an ite's condition) before
-# _lemma_numeric left conditions out. (The 35 unsatisfiable seeds in 1-150
-# then verify on both cores, 70 of 70 runs; 13 were rejected before.)
-CROSS_ITE_SEEDS = (6, 47, 129)
 
 
 def _export(source, core):
@@ -548,26 +509,6 @@ class TestMixedValidation(unittest.TestCase):
                                             "arithmetic step over both Int and Real atoms at node %d" % lemma):
                     check(graph, lemma)
 
-    def test_conditions_of_ites_are_not_atoms_of_the_step(self):
-        # An ite is an atom of the linear forms: a farkas lemma over it takes
-        # the ite's sort whatever its condition's atoms are.
-        for name, numeric in _OTHER_SORT_CONDITIONS.items():
-            source = LIRA_INPUTS[name]
-            for core in ("clause-log", "legacy"):
-                with self.subTest(name=name, core=core):
-                    certificate = _export(source, core)
-                    graph = proof_to_lean._validate_graph(source, certificate)
-                    ites = {node for node in range(len(graph.nodes))
-                            if graph.kind(node) == z3.Z3_OP_ITE and graph.is_arith(node)}
-                    self.assertTrue(ites)
-                    steps = [node for node in _th_lemma_nodes(certificate)
-                             if graph.decl(node).parameters[0] == "farkas"
-                             and ites & proof_to_lean._reachable(graph, graph.conclusion(node))[0]]
-                    self.assertTrue(steps)
-                    for step in steps:
-                        self.assertEqual(proof_to_lean._lemma_numeric(graph, step), numeric)
-                    proof_to_lean.reconstruct(source, certificate)
-
     def test_ites_of_one_table_keep_their_sort_in_normalized_rewrites(self):
         # (ite p 1 2) over Int and (ite p 1.0 2.0) over Real tabulate alike;
         # each atom's linear form must still range over the ite of its sort.
@@ -602,11 +543,19 @@ def _check_in_lean(test, source, core):
     """Export, reconstruct, and kernel-check a qf_lira input; return the certificate and the Lean text."""
     certificate = _export(source, core)
     test.assertEqual(certificate["fragment"], "qf_lira")
-    text, report = lean_test_support.check(test, source, certificate)
-    statement = text.split("theorem unsat", 1)[1].split(": False :=", 1)[0]
-    test.assertEqual(statement.count("    (_h"), len(certificate["assertions"]))
-    test.assertIn("(_vars : Nat -> Rat) (_ivars : Nat -> Int)", statement)
-    test.assertTrue(_STANDARD_AXIOMS in report or "does not depend on any axioms" in report, report)
+    with tempfile.TemporaryDirectory() as directory:
+        output = Path(directory) / "checked.lean"
+        proof_to_lean.check_and_write(source, certificate, output)
+        text = output.read_text()
+        namespace = "Z3Proofs.NativeCertificate.p" + hashlib.sha256(source.encode()).hexdigest()
+        statement = text.split("theorem unsat", 1)[1].split(": False :=", 1)[0]
+        test.assertEqual(statement.count("    (_h"), len(certificate["assertions"]))
+        test.assertIn("(_vars : Nat -> Rat) (_ivars : Nat -> Int)", statement)
+        output.write_text(text + "\n#print axioms %s.unsat\n" % namespace)
+        result = subprocess.run([str(proof_to_lean._CHECK_LEAN), str(output)], text=True, capture_output=True)
+        test.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        report = " ".join(result.stdout.split())
+        test.assertTrue(_STANDARD_AXIOMS in report or "does not depend on any axioms" in report, report)
     return certificate, text
 
 
@@ -622,8 +571,6 @@ class TestMixedLeanIntegration(unittest.TestCase):
         return _check_in_lean(self, source, core)[0]
 
     def test_documented_lira_inputs_verify_on_both_cores(self):
-        lean_test_support.prefetch((source, _export(source, core)) for source in LIRA_INPUTS.values()
-                                    for core in ("clause-log", "legacy"))
         hints = set()
         for name, source in LIRA_INPUTS.items():
             for core in ("clause-log", "legacy"):
@@ -652,18 +599,6 @@ class TestMixedLeanIntegration(unittest.TestCase):
             for core in ("clause-log", "legacy"):
                 with self.subTest(seed=seed, core=core):
                     self.check(source, core)
-
-    def test_pinned_random_instances_with_ites_over_the_other_sort_verify_on_both_cores(self):
-        runs = []
-        for seed in CROSS_ITE_SEEDS:
-            source = random_mixed_instance(seed, ites=0.3)
-            self.assertIsNotNone(source, "seed %d is no longer unsatisfiable" % seed)
-            self.assertRegex(source, r"\(ite \([<>=]+ \(\+ \(\* \S+ x")
-            runs += [(seed, core, source, _export(source, core)) for core in ("clause-log", "legacy")]
-        lean_test_support.prefetch((source, certificate) for _, _, source, certificate in runs)
-        for seed, core, source, _ in runs:
-            with self.subTest(seed=seed, core=core):
-                self.check(source, core)
 
 
 class TestCastValidation(unittest.TestCase):
@@ -985,8 +920,6 @@ class TestFloorLeanIntegration(unittest.TestCase):
             raise unittest.SkipTest("the z3 executable is required for the clause log")
 
     def test_documented_floor_inputs_verify_on_both_cores(self):
-        lean_test_support.prefetch((source, _export(source, core)) for source in FLOOR_INPUTS.values()
-                                    for core in ("clause-log", "legacy"))
         hints, congruences = set(), 0
         for name, source in FLOOR_INPUTS.items():
             for core in ("clause-log", "legacy"):
@@ -1021,8 +954,6 @@ class TestCastLeanIntegration(unittest.TestCase):
             raise unittest.SkipTest("the z3 executable is required for the clause log")
 
     def test_documented_cast_inputs_verify_on_both_cores(self):
-        lean_test_support.prefetch((source, _export(source, core)) for source in CAST_INPUTS.values()
-                                    for core in ("clause-log", "legacy"))
         hints = set()
         for name, source in CAST_INPUTS.items():
             for core in ("clause-log", "legacy"):

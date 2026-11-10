@@ -24,7 +24,6 @@ _EXAMPLES = Path(__file__).resolve().parent
 sys.path.insert(0, str(_EXAMPLES))
 import proof_certificate
 import proof_clause_log
-import lean_test_support
 import proof_to_lean
 
 _STANDARD_AXIOMS = "[propext, Classical.choice, Quot.sound]"
@@ -766,12 +765,12 @@ class TestUninterpretedValidation(unittest.TestCase):
             certificate = copy.deepcopy(self.certificate)
             certificate["fragment"] = fragment
             with self.subTest(fragment=fragment):
-                with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_uf, qf_uflra, qf_uflia, and qf_uflira certificates"):
+                with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_uf, qf_uflra, and qf_uflia certificates"):
                     proof_to_lean.reconstruct(self.source, certificate)
         # A Boolean certificate claiming qf_uf has no sort to declare.
         boolean = proof_certificate.export_certificate("(declare-const p Bool)(assert p)(assert (not p))")
         boolean["fragment"] = "qf_uf"
-        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_uf, qf_uflra, qf_uflia, and qf_uflira certificates"):
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_uf, qf_uflra, and qf_uflia certificates"):
             proof_to_lean.reconstruct("(declare-const p Bool)(assert p)(assert (not p))", boolean)
 
         def rename_sort(certificate, new_name, only_first=False):
@@ -950,29 +949,13 @@ class TestUninterpretedValidation(unittest.TestCase):
             literals = graph.clause(graph.conclusion(node))
             self.assertLess(len(literals), len(graph.assertions) + 1)
         text = proof_to_lean.reconstruct(source, certificate)
-        # The clauses over a pair with the ite rest on the value of the ite
-        # under the distinct, not on the Boolean structure over opaque
-        # atoms: no propagation proof is found and the lemmas go to grind
-        # alone (see _cnf_lemma). The clause over the pair ((g c a), c),
-        # whose equality is logged, is a projection of the distinct (its
-        # other pairs synthetic leaves) and gets a propagation proof.
-        (distinct,) = [node for node in range(len(graph.nodes)) if graph.kind(node) == z3.Z3_OP_DISTINCT]
-        arguments = graph.arguments(distinct)
-        logged = {graph.equalities.get((left, right))
-                  for index, left in enumerate(arguments) for right in arguments[index + 1:]} - {None}
-        self.assertEqual(len(logged), 1)
-        projections = 0
+        # These clauses rest on the value of the ite under the distinct, not
+        # on the Boolean structure over opaque atoms: no propagation proof
+        # is found and the lemmas go to grind alone (see _cnf_lemma).
+        self.assertNotIn("Classical.byContradiction", text)
         for node in cnf:
-            lemma = text.split("private theorem th_lemma_%d " % node, 1)[1].split("\n\n", 1)[0]
-            negated = {graph.arguments(literal)[0] for literal in graph.clause(graph.conclusion(node))
-                       if graph.kind(literal) == z3.Z3_OP_NOT}
-            if negated & logged:
-                projections += 1
-                self.assertIn("\n  first\n    | (refine Classical.byContradiction ?_\n", lemma)
-            else:
-                self.assertNotIn("Classical.byContradiction", lemma)
-                self.assertTrue(lemma.endswith("\n  grind (splits := 64)"))
-        self.assertEqual(projections, 1)
+            self.assertTrue(text.split("private theorem th_lemma_%d " % node, 1)[1].split("\n\n", 1)[0]
+                            .endswith("\n  grind (splits := 64)"))
 
     def test_cnf_fallback_unfolds_a_formula_shared_with_a_leaf(self):
         # The predicate application (P (and a b)) is an opaque leaf of the
@@ -1018,11 +1001,9 @@ class TestUninterpretedValidation(unittest.TestCase):
         self.assertEqual(len(cnf), 4)
         (distinct,) = [node for node in range(len(graph.nodes)) if graph.kind(node) == z3.Z3_OP_DISTINCT]
         a, b, c = graph.arguments(distinct)
-        leaves = {}
-        pairs = [leaf[1] for leaf in proof_to_lean._distinct_pair_leaves(graph, distinct, leaves)]
+        pairs = proof_to_lean._distinct_pair_equalities(graph, distinct)
         self.assertEqual([graph.arguments(pair) for pair in pairs], [(a, b), (a, c), (b, c)])
         self.assertTrue(all(graph.kind(pair) == z3.Z3_OP_EQ for pair in pairs))
-        self.assertEqual(sorted(leaves), sorted(pairs))
         leaves = {}
         structure = proof_to_lean._boolean_structure(graph, distinct, {}, {}, leaves)
         self.assertEqual(structure, ("and",) + tuple(("not", leaves[pair]) for pair in pairs))
@@ -1039,25 +1020,14 @@ class TestUninterpretedValidation(unittest.TestCase):
         self.assertRegex(text, r"\n       have _f\d+ := %s%s\.1\n" % (tail, r"\.2" * 9))  # conjunct 41 of 43
         self.assertNotIn(".2" * 33, text)
         # Kept as one leaf, the distinct leaves the prover nothing to propagate.
-        with patch.object(proof_to_lean, "_distinct_pair_leaves", lambda graph, node, leaves: None):
+        with patch.object(proof_to_lean, "_distinct_pair_equalities", lambda graph, node: None):
             self.assertNotIn("Classical.byContradiction", proof_to_lean.reconstruct(source, certificate))
         # A pair whose equality Z3 logged with the sides swapped reads otherwise
-        # than the distinct's conjunct (Not (a = b)): it is a synthetic leaf
-        # rendered as that conjunct, not recorded among the leaves.
+        # than the distinct's conjunct (Not (a = b)), so the distinct stays a leaf.
         tampered = copy.deepcopy(certificate)
         tampered["nodes"][pairs[1]]["arguments"].reverse()
         graph = proof_to_lean._validate_graph(source, tampered)
-        leaves = {}
-        structure = proof_to_lean._boolean_structure(graph, distinct, {}, {}, leaves)
-        synthetic = ("leaf", -(1 + a * len(graph.nodes) + c),
-                     "(%s = %s)" % (proof_to_lean._term(graph, a), proof_to_lean._term(graph, c)))
-        self.assertEqual(structure, ("and", ("not", leaves[pairs[0]]), ("not", synthetic), ("not", leaves[pairs[2]])))
-        self.assertEqual(sorted(leaves), [pairs[0], pairs[2]])
-        # With no pair in its order, the distinct stays a leaf.
-        for pair in (pairs[0], pairs[2]):
-            tampered["nodes"][pair]["arguments"].reverse()
-        graph = proof_to_lean._validate_graph(source, tampered)
-        self.assertIsNone(proof_to_lean._distinct_pair_leaves(graph, distinct, {}))
+        self.assertIsNone(proof_to_lean._distinct_pair_equalities(graph, distinct))
         leaves = {}
         self.assertEqual(proof_to_lean._boolean_structure(graph, distinct, {}, {}, leaves)[:2], ("leaf", distinct))
 
@@ -1250,7 +1220,7 @@ class TestUninterpretedValidation(unittest.TestCase):
         for fragment in ("propositional", "qf_lra"):
             relabeled = copy.deepcopy(certificate)
             relabeled["fragment"] = fragment
-            with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_uf, qf_uflra, qf_uflia, and qf_uflira certificates"):
+            with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_uf, qf_uflra, and qf_uflia certificates"):
                 proof_to_lean.reconstruct(source, relabeled)
         tampered = copy.deepcopy(certificate)
         for declaration in _declarations(tampered, lambda d: d["name"] == "r" and d["kind"] == z3.Z3_OP_UNINTERPRETED):
@@ -1678,11 +1648,19 @@ class TestLegacyUninterpretedLeanIntegration(unittest.TestCase):
     def check(self, source):
         certificate = proof_certificate.export_certificate(source)
         self.assertEqual(certificate["fragment"], "qf_uf")
-        text, report = lean_test_support.check(self, source, certificate)
-        statement = text.split("theorem unsat", 1)[1].split(": False :=", 1)[0]
-        self.assertEqual(statement.count("    (_h"), len(certificate["assertions"]))
-        self.assertIn(proof_to_lean._UF_BINDERS, statement)
-        return certificate, report
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "checked.lean"
+            proof_to_lean.check_and_write(source, certificate, output)
+            text = output.read_text()
+            namespace = "Z3Proofs.NativeCertificate.p" + hashlib.sha256(source.encode()).hexdigest()
+            statement = text.split("theorem unsat", 1)[1].split(": False :=", 1)[0]
+            self.assertEqual(statement.count("    (_h"), len(certificate["assertions"]))
+            self.assertIn(proof_to_lean._UF_BINDERS, statement)
+            output.write_text(text + "\n#print axioms %s.unsat\n" % namespace)
+            result = subprocess.run([str(proof_to_lean._CHECK_LEAN), str(output)],
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return certificate, " ".join(result.stdout.split())
 
     def assert_standard_axioms(self, report):
         if ".unsat' does not depend on any axioms" in report:
@@ -1692,8 +1670,6 @@ class TestLegacyUninterpretedLeanIntegration(unittest.TestCase):
                         axioms)
 
     def test_documented_uf_inputs_verify_through_the_legacy_core(self):
-        lean_test_support.prefetch((source, proof_certificate.export_certificate(source))
-                                    for source in {**UF_INPUTS, **LEGACY_UF_INPUTS}.values())
         for name, source in {**UF_INPUTS, **LEGACY_UF_INPUTS}.items():
             with self.subTest(name=name):
                 certificate, report = self.check(source)
@@ -1802,12 +1778,20 @@ class TestUninterpretedLeanIntegration(unittest.TestCase):
     def check(self, source, query=None):
         certificate = proof_certificate.export_clause_log_certificate(source, query=query)
         self.assertEqual(certificate["fragment"], "qf_uf")
-        text, report = lean_test_support.check(self, source, certificate)
-        statement = text.split("theorem unsat", 1)[1].split(": False :=", 1)[0]
-        self.assertEqual(statement.count("    (_h"), len(certificate["assertions"]))
-        self.assertNotIn("_hyp", statement)
-        self.assertIn(proof_to_lean._UF_BINDERS, statement)
-        return certificate, report
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "checked.lean"
+            proof_to_lean.check_and_write(source, certificate, output)
+            text = output.read_text()
+            namespace = "Z3Proofs.NativeCertificate.p" + hashlib.sha256(source.encode()).hexdigest()
+            statement = text.split("theorem unsat", 1)[1].split(": False :=", 1)[0]
+            self.assertEqual(statement.count("    (_h"), len(certificate["assertions"]))
+            self.assertNotIn("_hyp", statement)
+            self.assertIn(proof_to_lean._UF_BINDERS, statement)
+            output.write_text(text + "\n#print axioms %s.unsat\n" % namespace)
+            result = subprocess.run([str(proof_to_lean._CHECK_LEAN), str(output)],
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return certificate, " ".join(result.stdout.split())
 
     def test_trimmed_logs_over_a_declared_sort_verify(self):
         # Logs from 4 KB up are trimmed natively; the trimmer prints the
@@ -1859,7 +1843,6 @@ class TestUninterpretedLeanIntegration(unittest.TestCase):
         self.assertLess(3 * len(certificate["nodes"]), len(untrimmed["nodes"]))
         self.assertLess(certificate["rule_counts"]["th-lemma"], untrimmed["rule_counts"]["th-lemma"])
 
-    @lean_test_support.slow("QF_UF NEQ004_size4, 21 MB of Lean, about 90 s at 5.5 GB")
     def test_large_certificates_verify_under_the_memory_cap(self):
         # SMT-LIB QF_UF NEQ/NEQ004_size4 (16 KB): 20,634 proof steps, 13,700
         # declarations, 21 MB of Lean. With the interpretation as five
@@ -1911,8 +1894,6 @@ class TestUninterpretedLeanIntegration(unittest.TestCase):
         self.assertIn(".unsat' depends on axioms: " + _STANDARD_AXIOMS, " ".join(result.stdout.split()))
 
     def test_documented_uf_inputs_verify_under_the_standard_axioms(self):
-        lean_test_support.prefetch((source, proof_certificate.export_clause_log_certificate(source))
-                                    for source in UF_INPUTS.values())
         for name, source in UF_INPUTS.items():
             with self.subTest(name=name):
                 certificate, report = self.check(source)
@@ -1948,15 +1929,6 @@ class TestUninterpretedLeanIntegration(unittest.TestCase):
             text = proof_to_lean.reconstruct(source, certificate)
             self.assertIn("refine Classical.byContradiction ?_\n       refine (fun (_h : ", text)
             self.check(source)
-
-    def test_distincts_of_more_than_32_terms_verify(self):
-        # Above 32 arguments the sat.smt core encoded the distinct over a
-        # fresh sort and function, which the export rejected; with proofs it
-        # now logs the pairwise disequalities, of which the proof uses a few.
-        from test_proof_certificate import wide_distinct_source
-        certificate, report = self.check(wide_distinct_source(40, "U"))
-        self.assertIn(".unsat' depends on axioms: " + _STANDARD_AXIOMS, report)
-        self.assertEqual({d["range"] for d in certificate["declarations"]}, {"Bool", "U", "Proof"})
 
     def test_cnf_lemmas_over_a_distinct_verify_by_propagation_alone(self):
         # The cnf lemmas whose literal is a pair of the asserted distinct,
