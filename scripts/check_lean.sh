@@ -33,11 +33,7 @@ done
 
 caller_dir="$PWD"
 cd -- "$project_dir"
-# Z3_LEAN_SKIP_BUILD=1: the caller has already built the project in this checkout (the Python
-# tests set it after their first check).
-if [[ "${Z3_LEAN_SKIP_BUILD:-}" != "1" ]]; then
-    "$elan_command" run "$toolchain" lake build
-fi
+"$elan_command" run "$toolchain" lake build
 for file in "$@"; do
     case "$file" in
         /*) ;;

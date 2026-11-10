@@ -138,17 +138,14 @@ namespace opt {
 
     obj_map<expr, rational> preprocess::dualize(obj_map<expr, rational> const& soft, expr_ref_vector& fmls) {
         obj_map<expr, rational> new_soft;
-        fmls.reset();
         for (auto const& [k, v] : soft) {
             expr* nk = mk_not(m, k);
             m_trail.push_back(nk);
-            if (new_soft.contains(nk))
-                new_soft[nk] += v;
-            else {
-                new_soft.insert(nk, v);
-                fmls.push_back(nk);
-            }
+            new_soft.insert(nk, v);
         }
+        unsigned i = 0;
+        for (expr* f : fmls)
+            fmls[i++] = mk_not(m, f);
 
         return new_soft;
     }
