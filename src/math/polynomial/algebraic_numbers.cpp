@@ -335,17 +335,21 @@ namespace algebraic_numbers {
             }
         }
 
-        void to_rational(numeral & a, mpq & r) {
-            VERIFY(is_rational(a));
+        bool to_rational(numeral & a, mpq & r) {
+            if (!is_rational(a))
+                return false;
             SASSERT(a.is_basic());
             qm().set(r, basic_value(a));
+            return true;
         }
 
-        void to_rational(numeral & a, rational & r) {
+        bool to_rational(numeral & a, rational & r) {
             scoped_mpq tmp(qm());
-            to_rational(a, tmp);
+            if (!to_rational(a, tmp))
+                return false;
             rational tmp2(tmp);
             r = tmp2;
+            return true;
         }
 
         unsigned degree(numeral const & a) {
@@ -2091,12 +2095,14 @@ namespace algebraic_numbers {
 
             COMPARE_INTERVAL();
 
-            // if cell_a and cell_b, contain the same polynomial,
-            // and the intervals are overlapping, then they are
-            // the same root.
+            // Overlapping isolating intervals for the same polynomial can
+            // contain different roots. Equal lower signs identify the same
+            // root; otherwise the roots are ordered by the lower endpoints.
             if (compare_p(cell_a, cell_b)) {
                 m_compare_poly_eq++;
-                return sign_zero;
+                if (sign_lower(cell_a) == sign_lower(cell_b))
+                    return sign_zero;
+                return bqm().lt(a_lower, b_lower) ? sign_neg : sign_pos;
             }
 
             TRACE(algebraic, tout << "comparing\n";
@@ -3388,11 +3394,11 @@ namespace algebraic_numbers {
         return m_imp->degree(const_cast<numeral&>(a));
     }
 
-    void manager::to_rational(numeral const & a, mpq & r) {
+    bool manager::to_rational(numeral const & a, mpq & r) {
         return m_imp->to_rational(const_cast<numeral&>(a), r);
     }
 
-    void manager::to_rational(numeral const & a, rational & r) {
+    bool manager::to_rational(numeral const & a, rational & r) {
         return m_imp->to_rational(const_cast<numeral&>(a), r);
     }
 

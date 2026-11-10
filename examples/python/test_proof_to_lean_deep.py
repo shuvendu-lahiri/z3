@@ -24,6 +24,7 @@ _EXAMPLES = Path(__file__).resolve().parent
 sys.path.insert(0, str(_EXAMPLES))
 import proof_certificate
 import proof_clause_log
+import lean_test_support
 import proof_to_lean
 from test_proof_to_lean_uf import _z3_available
 
@@ -54,6 +55,24 @@ def deep_bounds_conjunction(depth):
     source += "".join("(declare-const x%d Real)\n" % index for index in range(depth))
     operands = ["(< x%d 5.0)" % index for index in range(depth)] + ["(< x y)", "(< y x)"]
     return source + "(assert %s)\n(check-sat)\n" % _nested_and(operands)
+
+
+def deep_enumeration_store_chain(depth):
+    """A read of an array of an enumeration through depth nested stores, which is none of the constructors.
+
+    The datatype solver splits on the read; Lean gets its cases as one proof
+    term built along the chain (_cases_store), down to the array constant.
+    """
+    constructors = ("red", "green", "blue")
+    source = "(set-logic ALL)\n(declare-datatypes ((Color 0)) (((red) (green) (blue))))\n"
+    source += "(declare-const a (Array Int Color))\n(declare-const j Int)\n"
+    source += "".join("(declare-const k%d Int)\n(declare-const v%d Color)\n" % (index, index)
+                      for index in range(depth))
+    array = "a"
+    for index in range(depth):
+        array = "(store %s k%d v%d)" % (array, index, index)
+    source += "".join("(assert (not (= (select %s j) %s)))\n" % (array, value) for value in constructors)
+    return source + "(check-sat)\n"
 
 
 def deep_case_split_facts(depth, closed=True):
@@ -155,14 +174,7 @@ class TestDeepCaseSplits(unittest.TestCase):
 class _LeanChecked(unittest.TestCase):
     def check_lean(self, source, certificate):
         """Check the certificate with Lean and return the Lean text."""
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "checked.lean"
-            try:
-                proof_to_lean.check_and_write(source, certificate, output)
-            except subprocess.CalledProcessError as error:
-                errors = [line for line in (error.stdout + error.stderr).splitlines() if "error" in line]
-                raise self.failureException("Lean rejected the certificate:\n%s" % "\n".join(errors[:5])) from None
-            text = output.read_text()
+        text, _ = lean_test_support.check(self, source, certificate)
         namespace = "Z3Proofs.NativeCertificate.p" + hashlib.sha256(source.encode()).hexdigest()
         self.assertIn("namespace " + namespace, text)
         return text
@@ -189,6 +201,22 @@ class TestDeepClauseLog(_LeanChecked):
         # through the levels above them.
         certificate = self.check(deep_bounds_conjunction(DEPTH), "qf_lra")
         self.assertEqual(certificate["rule_counts"]["and-elim"], DEPTH + 2)
+
+    def test_deep_enumeration_store_chain_is_reconstructed(self):
+        # The cases of a read of an array of an enumeration are built along
+        # its array (_read_cases), one _cases_store per level. Reconstructed
+        # only: a constant of the enumeration per level is a field of the
+        # interpretation each, and a structure of a thousand fields runs out
+        # of heartbeats before any lemma (the same chain 200 levels deep
+        # passes Lean).
+        source = deep_enumeration_store_chain(DEPTH)
+        certificate = proof_certificate.export_clause_log_certificate(source)
+        text = proof_to_lean.reconstruct(source, certificate)
+        read_cases = [line for line in text.split("\n") if line.startswith("  have _ec")
+                      and "_cases_store" in line]
+        self.assertEqual(len(read_cases), 1)
+        self.assertEqual(read_cases[0].count("(_cases_store "), DEPTH)
+        self.assertIn("(_m.enum_acases_", read_cases[0])
 
 
 class TestDeepLegacyCore(_LeanChecked):
