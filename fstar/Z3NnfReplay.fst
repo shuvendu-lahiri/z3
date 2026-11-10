@@ -235,9 +235,7 @@
    Under the gate, a `rewrite` leaf the checks above refuse is replayed when
    `Z3SortedRealLinear.real_equivalent` decides it (at most 256 nodes per
    side): linear Real and Int-with-to_real renormalization, comparison
-   orientation and strictness, binary Real product commutation, and Real
-   equations (the same, opposite or proportional difference polynomial; an
-   equation of constants decided as true or false). Its lemma
+   orientation and strictness, binary Real product commutation. Its lemma
    requires `real ==> Z3SortedReal.real_model` of the same Sorted
    interpretation (which contains the gate), so the flag alone proves
    nothing. The ITE laws do not read the gate.
@@ -846,8 +844,8 @@ let rewrite_ok (lhs rhs:expr) : bool =
    Z3SortedReal.real_primitive of its checked schema). Under it, a leaf the
    Real normal forms decide (Z3SortedRealLinear.real_equivalent: Real and
    Int-with-to_real linear renormalization, comparison orientation and
-   strictness, binary Real product commutation, Real equations by their
-   difference polynomials) is replayed too, after every check above. *)
+   strictness, binary Real product commutation) is replayed too, after every
+   check above. *)
 let real_rewrite_ok (real:bool) (lhs rhs:expr) : bool =
   if rewrite_ok lhs rhs then true else real && LIN.real_equivalent lhs rhs
 
@@ -2509,13 +2507,6 @@ let agree_at (#base:sort -> Type0) (sigma:V.signature) (j d:nat) (a:list sort)
              (rho rho':V.environment base sigma a) (p:nat{p < L.length a}) : prop =
   p <> d + j ==> (rho p <: V.tree base) == (rho' p <: V.tree base)
 
-let lemma_agree_subst_rel_at (#base:sort -> Type0) (sigma:V.signature) (j:nat) (s0:list sort)
-                             (rho rho':V.environment base sigma s0) (tv:V.tree base)
-                             (p:nat{p < L.length s0})
-  : Lemma (requires agree_at sigma j 0 s0 rho' rho p /\
-                    (p == j ==> (rho' p <: V.tree base) == tv))
-          (ensures subst_rel_at sigma j 0 s0 s0 rho tv rho' rho p) = ()
-
 let agree (#base:sort -> Type0) (sigma:V.signature) (j d:nat) (a:list sort)
           (rho rho':V.environment base sigma a) : prop =
   forall (p:nat{p < L.length a}). agree_at sigma j d a rho rho' p
@@ -2770,8 +2761,7 @@ let lemma_der_at (#base:sort -> Type0) (s:S.checked_schema) (bc:S.boolean_carrie
       lemma_avoid sigma i j 0 s0 rho_v rho' t;
       lemma_or_of s bc eq other s0 rho' rem;
       let at2 (p:nat{p < L.length s0}) : Lemma (subst_rel_at sigma j 0 s0 s0 rho_v tv rho' rho_v p) =
-        at p;
-        lemma_agree_subst_rel_at sigma j s0 rho_v rho' tv p in
+        at p in
       FStar.Classical.forall_intro at2;
       lemma_subst_eval sigma i j t 0 s0 s0 rho_v rho' rho_v (or_of rem) body';
       T.lemma_boolean s bc (T.evaluate_at s bc eq other s0 rho' (or_of rem));
