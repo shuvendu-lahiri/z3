@@ -58,14 +58,7 @@
   They are installed under this directory's install subdirectory before linking.
 
 .PARAMETER RunTests
-  Full scope: verify every registered module and F*/Pulse regression in
-  tools/checker_modules.json and execute native bridge, CLI, and Cherry tests.
-  Without it, only the production modules in F*'s dependency closure of the
-  extracted checker modules are verified, and no test is built or run.
-
-.PARAMETER ReportDir
-  Optional directory for scope-ocaml.json and scope-cherry.json, which record
-  the source revision, scope, and selected modules of this build.
+  Verify F*/Pulse regressions and execute native bridge and CLI tests.
 
 .PARAMETER ProfileChecker
   Instrument copied OCaml sources for per-rule/function time, allocation,
@@ -93,7 +86,6 @@ param(
   [string]$WslBuildDir = "~/z3checker",
   [string]$Z3BuildDir = "~/z3-native-ffi-build",
   [string]$CacheDir = "",
-  [string]$ReportDir = "",
   [switch]$RunTests,
   [switch]$ProfileChecker,
   [switch]$BuildCherry,
@@ -114,7 +106,6 @@ if (-not $Z3WindowsBuildDir) { $Z3WindowsBuildDir = Join-Path $repoDir "build" }
 if (-not $Z3InstallDir) { $Z3InstallDir = Join-Path $Z3WindowsBuildDir "install" }
 $Z3WindowsBuildDir = [IO.Path]::GetFullPath($Z3WindowsBuildDir)
 $Z3InstallDir = [IO.Path]::GetFullPath($Z3InstallDir)
-if ($ReportDir) { $ReportDir = [IO.Path]::GetFullPath($ReportDir) }
 Push-Location $fstarDir
 try {
   Write-Host "=== Phase 0: build and install the F*/Pulse SMT solver ==="
@@ -151,6 +142,50 @@ try {
   $z3Version = $versionMatch.Groups[1].Value
   Write-Host "Installed F*/Pulse SMT solver: $Z3Exe ($versionOutput)"
 
+  # Dependencies must be cached before their dependents are extracted.
+  $moduleManifest = Get-Content -Raw (Join-Path $PSScriptRoot "checker_modules.json") | ConvertFrom-Json
+  $modules = $moduleManifest.modules
+
+  Write-Host "=== Phase 1a: type-check + cache ==="
+  # The pinned F* profiler cannot report timings in GitHub's auto-selected message format.
+  foreach ($f in $modules) {
+    Write-Host "Verifying $f"
+    & $FstarExe --timing --message_format human --warn_error '@1..999' --cache_checked_modules --cache_dir $CacheDir --include $CacheDir --smt $Z3Exe --z3version $z3Version $f 2>&1 |
+      ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) { throw "F* verification failed: $f" }
+  }
+  $missing = $modules | Where-Object { -not (Test-Path (Join-Path $CacheDir "$_.checked")) }
+  if ($missing) { throw "Failed to cache: $($missing -join ', ')" }
+  if ($RunTests) {
+    $testModules = $moduleManifest.tests
+    foreach ($testModule in $testModules) {
+      Write-Host "Verifying $testModule"
+      & $FstarExe --timing --message_format human --warn_error '@1..999' --cache_checked_modules --cache_dir $CacheDir --include $CacheDir `
+          --smt $Z3Exe --z3version $z3Version $testModule
+      if ($LASTEXITCODE -ne 0) { throw "F*/Pulse regressions failed: $testModule" }
+    }
+  }
+
+  Write-Host "=== Phase 1b: extract to OCaml ==="
+  # Custard extracts the whole program in one run. Every checker module is a root, so the
+  # hand-written OCaml driver can use any of its definitions; --custard_split keeps one
+  # OCaml module per F* module, which the driver and the link order below rely on.
+  $entryModules = $modules | Where-Object { $_ -notlike "*.fsti" } |
+    ForEach-Object { "--custard_entry_module"; $_ -replace '\.fst$', '' }
+  & $FstarExe --warn_error '@1..999' --codegen OCaml --custard_split --cache_dir $CacheDir --include $CacheDir `
+      --odir $extractDir --smt $Z3Exe --z3version $z3Version @entryModules Z3NativeProof.fst
+  if ($LASTEXITCODE -ne 0) { throw "OCaml extraction failed" }
+
+  Write-Host "=== Phase 2: compile native checker ==="
+  if ($windowsHost) {
+    $drive = $fstarDir.Substring(0, 1).ToLowerInvariant()
+    $wslFstarDir = "/mnt/$drive/" + $fstarDir.Substring(3).Replace('\', '/')
+  }
+  else {
+    $wslFstarDir = $fstarDir
+    if ($WslBuildDir.StartsWith("~/")) { $WslBuildDir = Join-Path $HOME $WslBuildDir.Substring(2) }
+    $WslBuildDir = [IO.Path]::GetFullPath($WslBuildDir)
+  }
   $order = @(
     "prims.ml", "Custard_Prims.ml", "fStar_Pervasives.ml", "fStar_Pervasives_Native.ml", "fStar_List_Tot_Base.ml", "fStar_String.ml",
     "fStar_UInt.ml", "fStar_FunctionalExtensionality.ml",
@@ -175,68 +210,10 @@ try {
     "Z3Native.ml", "Z3NativeProof.ml", "Z3NativeMain.ml", "main.ml"
   )
   if ($ProfileChecker) { $order = @("Z3Profile.ml") + $order }
-  $extracted = @($order | Where-Object {
-    -not (Test-Path (Join-Path (Join-Path $fstarDir "ocaml_runtime") $_))
-  })
-
-  # The extracted modules and the interface the OCaml runtime implements are the checker's
-  # roots; their F* dependency closure must be verified before extraction.
-  $roots = @($extracted | ForEach-Object {
-    $name = $_ -replace '\.ml$', ''
-    if (Test-Path (Join-Path $fstarDir "$name.fst")) { "$name.fst" } else { "$name.fsti" }
-  }) + "Z3Native.fsti"
-  $python = if ($windowsHost) { "python" } else { "python3" }
-  $scopeArgs = @("--fstar", $FstarExe, "--backend", "ocaml")
-  if ($RunTests) { $scopeArgs += "--full" }
-  if ($ReportDir) { $scopeArgs += @("--report", (Join-Path $ReportDir "scope-ocaml.json")) }
-  $scopeOutput = & $python (Join-Path $PSScriptRoot "checker_scope.py") @scopeArgs @roots
-  if ($LASTEXITCODE -ne 0) { throw "Checker module selection failed" }
-  $scope = ($scopeOutput -join "`n") | ConvertFrom-Json
-  $modules = @($scope.modules)
-  $scopeName = if ($RunTests) { "full" } else { "checker-only" }
-  Write-Host "Verification scope ${scopeName}: $($modules.Count) modules, $(@($scope.tests).Count) tests"
-
-  # Dependencies must be cached before their dependents are extracted.
-  Write-Host "=== Phase 1a: type-check + cache ==="
-  # The pinned F* profiler cannot report timings in GitHub's auto-selected message format.
-  foreach ($f in $modules) {
-    Write-Host "Verifying $f"
-    & $FstarExe --timing --message_format human --warn_error '@1..999' --cache_checked_modules --cache_dir $CacheDir --include $CacheDir --smt $Z3Exe --z3version $z3Version $f 2>&1 |
-      ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) { throw "F* verification failed: $f" }
-  }
-  $missing = $modules | Where-Object { -not (Test-Path (Join-Path $CacheDir "$_.checked")) }
-  if ($missing) { throw "Failed to cache: $($missing -join ', ')" }
-  foreach ($testModule in $scope.tests) {
-    Write-Host "Verifying $testModule"
-    & $FstarExe --timing --message_format human --warn_error '@1..999' --cache_checked_modules --cache_dir $CacheDir --include $CacheDir `
-        --smt $Z3Exe --z3version $z3Version $testModule
-    if ($LASTEXITCODE -ne 0) { throw "F*/Pulse regressions failed: $testModule" }
-  }
-
-  Write-Host "=== Phase 1b: extract to OCaml ==="
-  # Custard extracts the whole program in one run. Every module of the checker's dependency
-  # closure (every registered production module with -RunTests) is a root, so the hand-written
-  # OCaml driver can use any of its definitions;
-  # --custard_split keeps one OCaml module per F* module, which the driver and the link
-  # order below rely on.
-  $entryModules = $scope.entries | ForEach-Object { "--custard_entry_module"; $_ -replace '\.fst$', '' }
-  & $FstarExe --warn_error '@1..999' --codegen OCaml --custard_split --cache_dir $CacheDir --include $CacheDir `
-      --odir $extractDir --smt $Z3Exe --z3version $z3Version @entryModules Z3NativeProof.fst
-  if ($LASTEXITCODE -ne 0) { throw "OCaml extraction failed" }
-
-  Write-Host "=== Phase 2: compile native checker ==="
-  if ($windowsHost) {
-    $drive = $fstarDir.Substring(0, 1).ToLowerInvariant()
-    $wslFstarDir = "/mnt/$drive/" + $fstarDir.Substring(3).Replace('\', '/')
-  }
-  else {
-    $wslFstarDir = $fstarDir
-    if ($WslBuildDir.StartsWith("~/")) { $WslBuildDir = Join-Path $HOME $WslBuildDir.Substring(2) }
-    $WslBuildDir = [IO.Path]::GetFullPath($WslBuildDir)
-  }
   $orderStr = $order -join " "
-  $extractedOrderStr = $extracted -join " "
+  $extractedOrderStr = ($order | Where-Object {
+    -not (Test-Path (Join-Path (Join-Path $fstarDir "ocaml_runtime") $_))
+  }) -join " "
   $shellBuildDir = if ($WslBuildDir.StartsWith("~/")) { '$HOME/' + $WslBuildDir.Substring(2) } else { $WslBuildDir }
   $testScript = ""
   if ($RunTests) {
@@ -260,18 +237,10 @@ Z3_FSTAR_PROFILE=1 ./profile-tests
   $cherryScript = ""
   if ($BuildCherry) {
     $cherryTests = if ($RunTests) { "--run-tests" } else { "" }
-    $cherryReport = ""
-    if ($ReportDir) {
-      $cherryReportDir = $ReportDir
-      if ($windowsHost) {
-        $cherryReportDir = "/mnt/" + $ReportDir.Substring(0, 1).ToLowerInvariant() + "/" + $ReportDir.Substring(3).Replace('\', '/')
-      }
-      $cherryReport = "--report `"$cherryReportDir/scope-cherry.json`""
-    }
     $cherryScript = @"
 python3 "$wslFstarDir/tools/build_cherry_checker.py" \
   --fstar "$CherryFstarExe" --z3-install "`$z3_install" \
-  --build-dir "$shellBuildDir/cherry" $cherryTests $cherryReport
+  --build-dir "$shellBuildDir/cherry" $cherryTests
 "@
   }
   $linkSetup = @"
@@ -363,6 +332,7 @@ echo BUILD_OK
     try {
       $env:Z3_FSTAR_CHECKER = "$WslBuildDir/checker"
       $env:Z3_FSTAR_WSL_DISTRO = $WslDistribution
+      $python = if ($windowsHost) { "python" } else { "python3" }
       & $python (Join-Path $PSScriptRoot "test_native_checker.py")
       if ($LASTEXITCODE -ne 0) { throw "Native checker CLI tests failed" }
     }
