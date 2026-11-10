@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
+    inputs:
+      redo_pr:
+        description: Optional merged PR number to re-audit without clearing history
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -42,9 +47,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NFV_START_AT: ${{ vars.NFV_START_AT }}
+          NFV_REDO_PR: ${{ inputs.redo_pr || '' }}
         run: |
+          args=()
+          if [[ -n "$NFV_REDO_PR" ]]; then args+=(--redo-pr "$NFV_REDO_PR"); fi
           nfv-workflow merged-plan --repository "$GITHUB_REPOSITORY" \
-            --since "$NFV_START_AT" --out nfv-plan
+            --since "$NFV_START_AT" --out nfv-plan "${args[@]}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nfv-plan
@@ -63,6 +71,7 @@ jobs:
       contents: read
       pull-requests: read
       issues: write
+      discussions: write
     uses: ./.github/workflows/nfv-pr-review.lock.yml
     with:
       pr_number: ${{ matrix.number }}

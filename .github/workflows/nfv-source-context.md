@@ -131,7 +131,7 @@ post-steps:
       name: nfv-source-context-validated-${{ inputs.pr_number }}-${{ inputs.merge_sha }}
       overwrite: true
       if-no-files-found: error
-source: microsoft/neuro-formal-verification/workflow@91c788573ba7bb771e90a16dcec566c1c4345377
+source: microsoft/neuro-formal-verification/workflow@25976a6f37a64e1f01f55e6fad4e5e39f1aae7f1
 ---
 
 # Source-context session
