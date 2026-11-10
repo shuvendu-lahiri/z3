@@ -1,0 +1,117 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+name: NFV formal PR audit
+on:
+  push:
+    branches: ['**']
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nfv-post-merge-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  discover:
+    if: >-
+      vars.NFV_RELEASE_SHA != '' && vars.NFV_START_AT != '' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_work: ${{ steps.plan.outputs.has_work }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: microsoft/neuro-formal-verification
+          ref: ${{ vars.NFV_RELEASE_SHA }}
+          path: nfv-plugin
+          token: ${{ secrets.NFV_RELEASE_TOKEN || github.token }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ./nfv-plugin ./nfv-plugin/workflow
+      - name: Discover unaudited merged revisions and restore the audit ledger
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NFV_START_AT: ${{ vars.NFV_START_AT }}
+        run: |
+          nfv-workflow merged-plan --repository "$GITHUB_REPOSITORY" \
+            --since "$NFV_START_AT" --out nfv-plan
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nfv-plan
+          overwrite: true
+          path: nfv-plan
+          if-no-files-found: error
+  audit:
+    needs: discover
+    if: needs.discover.outputs.has_work == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+      issues: write
+    uses: ./.github/workflows/nfv-pr-review.lock.yml
+    with:
+      pr_number: ${{ matrix.number }}
+      merge_sha: ${{ matrix.merge_sha }}
+      base_sha: ${{ matrix.base_sha }}
+    secrets: inherit
+  ledger:
+    needs: [discover, audit]
+    if: always() && needs.discover.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: microsoft/neuro-formal-verification
+          ref: ${{ vars.NFV_RELEASE_SHA }}
+          path: nfv-plugin
+          token: ${{ secrets.NFV_RELEASE_TOKEN || github.token }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ./nfv-plugin ./nfv-plugin/workflow
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nfv-plan
+          path: nfv-plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.discover.outputs.has_work == 'true'
+        continue-on-error: true
+        with:
+          pattern: nfv-summary-*
+          path: nfv-summaries
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.discover.outputs.has_work == 'true'
+        continue-on-error: true
+        with:
+          pattern: nfv-publication-*
+          path: nfv-publications
+      - name: Advance completed work without dropping failed attempts
+        run: |
+          nfv-workflow advance-ledger --previous nfv-plan/ledger.json \
+            --summaries nfv-summaries --summaries nfv-publications \
+            --plan nfv-plan/matrix.json --out nfv-ledger/ledger.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nfv-ledger
+          overwrite: true
+          path: nfv-ledger/ledger.json
+          if-no-files-found: error
