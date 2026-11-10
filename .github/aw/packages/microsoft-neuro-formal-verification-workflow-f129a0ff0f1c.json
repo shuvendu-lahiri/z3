@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "package": "microsoft/neuro-formal-verification/workflow",
-  "source": "microsoft/neuro-formal-verification/workflow@9adb18264bdcacdd0ab8f5f42645febdd335bd8a",
-  "resolvedCommit": "9adb18264bdcacdd0ab8f5f42645febdd335bd8a",
+  "source": "microsoft/neuro-formal-verification/workflow@8862147fe86ba91e5507bfe776e226f4f4b379b0",
+  "resolvedCommit": "8862147fe86ba91e5507bfe776e226f4f4b379b0",
   "installer": "gh-aw v0.88.7",
   "files": [
     {
@@ -13,12 +13,12 @@
     {
       "source": ".github/workflows/nfv-pr-review.md",
       "destination": ".github/workflows/nfv-pr-review.md",
-      "sha256": "114e179b8f2c2060391579b5bd10a7da002ad7e28760ca7ac9c2bda29ca115cf"
+      "sha256": "b46e10e3d5e4b209c7ea8259556c2ad2583957c6b2b9384a1db694db4e5e7719"
     },
     {
       "source": ".github/workflows/nfv-source-context.md",
       "destination": ".github/workflows/nfv-source-context.md",
-      "sha256": "8e735df3daf84accf6161fef96e4187859a72a6de34dce5f5a5b4a999d286749"
+      "sha256": "bc32d759a90cff86cfb0ff2f8500ddc97217dd8ef2f17344666d29df6b2f6cfe"
     }
   ]
 }
