@@ -37,10 +37,11 @@ open Z3PulseProofChecker
 (* only their names and arities matter to `fact`/`check_proof`)        *)
 (* ----------------------------------------------------------------- *)
 
-let int_s = SortApp IntSymbol []
-let bool_s = bool_sort
-let bv_s = SortApp (BvSymbol 32) []
-let seq_s = SortApp SeqSymbol [int_s]
+let s (n:string) : sort = BaseSort n
+let int_s = s "Int"
+let bool_s = s "Bool"
+let bv_s = s "BV32"
+let seq_s = s "SeqInt"
 let arr_s : sort = ArraySort [int_s] int_s
 
 let konst (name:string) (rng:sort) : func_decl =

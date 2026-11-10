@@ -1831,8 +1831,7 @@ namespace sat {
         if (!m_ext || !m_ext->tracking_assumptions())
             return basic_search();
         while (true) {
-            // Private theory phases must preserve the caller's assumptions.
-            pop(scope_lvl());
+            pop_to_base_level();
             reinit_assumptions();
             lbool r = basic_search();
             if (r != l_false) 
@@ -2838,11 +2837,6 @@ namespace sat {
         }
 
         if (m_config.m_core_minimize) {
-            // Let the extension retry private phases before nested MUS checks
-            // replace its current assumptions and search state.
-            for (literal lit : m_core)
-                if (m_ext_assumption_set.contains(lit))
-                    return;
             if (m_min_core_valid && m_min_core.size() < m_core.size()) {
                 IF_VERBOSE(2, verbose_stream() << "(sat.updating core " << m_min_core.size() << " " << m_core.size() << ")\n";);
                 m_core.reset();

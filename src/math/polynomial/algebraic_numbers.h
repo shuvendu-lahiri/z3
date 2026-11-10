@@ -109,16 +109,18 @@ namespace algebraic_numbers {
         unsigned degree(numeral const & a);
 
         /**
-           \brief Convert a into a rational number. Return false and leave r
-           unchanged if a is irrational.
+           \brief Convert a into a rational number.
+           
+           \pre is_rational(a)
         */
-        bool to_rational(numeral const & a, mpq & r);
+        void to_rational(numeral const & a, mpq & r);
 
         /**
-           \brief Convert a into a rational number. Return false and leave r
-           unchanged if a is irrational.
+           \brief Convert a into a rational number.
+           
+           \pre is_rational(a)
         */
-        bool to_rational(numeral const & a, rational & r);
+        void to_rational(numeral const & a, rational & r);
 
         /**
            \brief a <- n

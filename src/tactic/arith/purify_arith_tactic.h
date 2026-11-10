@@ -28,7 +28,8 @@ Abstract:
         k is even. Similarly to the division by zero case,
         uninterpreted function symbols are created.
 
-      - (^ t 0) is 1, including when t == 0.
+      - The semantics of (^ t 0) is not specified if t == 0. Thus,
+        uninterpreted function symbols are created.
 
       - TO_REAL is not really outside of the RCF language
         since it is only used for "casting".
@@ -75,4 +76,5 @@ class tactic;
 tactic * mk_purify_arith_tactic(ast_manager & m, params_ref const & p = params_ref());
 
 Z3_ADD_TACTIC(purify_arith, "purify-arith", "eliminate unnecessary operators: -, /, div, mod, rem, is-int, to-int, ^, root-objects.", mk_purify_arith_tactic(m, p));
+
 
