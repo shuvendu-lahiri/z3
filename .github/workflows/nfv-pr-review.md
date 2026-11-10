@@ -246,7 +246,7 @@ post-steps:
       overwrite: true
       path: /tmp/gh-aw/sandbox/agent/logs/nfv
       if-no-files-found: warn
-source: microsoft/neuro-formal-verification/workflow@c20ca2832b61469701b2bd3d1fcd73a02ded242d
+source: microsoft/neuro-formal-verification/workflow@91c788573ba7bb771e90a16dcec566c1c4345377
 ---
 
 # NFV formal PR audit
