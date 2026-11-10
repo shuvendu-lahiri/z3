@@ -165,6 +165,90 @@ ITE_REWRITTEN_INPUTS = {
 }
 
 
+# Difference-logic-shaped inputs. The frontend's tactic preamble used to
+# route them to the older theory_arith, whose proof parameters
+# (assign-bounds, signed coefficients, antecedent-only weights) the exporter
+# normalizes; with the preamble bypassed the smt core's theory_lra proves
+# them with bound propagations from premises.
+LEGACY_THEORY_ARITH_INPUTS = {
+    "dl_fixed_zero": """\
+(declare-const x Real)
+(declare-const y Real)
+(assert (<= x 0.0))
+(assert (>= x 0.0))
+(assert (<= y 0.0))
+(assert (>= y 0.0))
+(assert (not (= x y)))
+(check-sat)
+""",
+    "dl_cycle_bool": """\
+(declare-const x Real)
+(declare-const y Real)
+(declare-const z Real)
+(declare-const p Bool)
+(assert (or p (<= (- x y) 1.0)))
+(assert (or (not p) (<= (- x y) 2.0)))
+(assert (<= (- y z) 1.0))
+(assert (< (- z x) (- 3.0)))
+(check-sat)
+""",
+    "dl_fixed_value_var": """\
+(declare-const x Real)
+(declare-const y Real)
+(declare-const z Real)
+(assert (<= x 3.0))
+(assert (>= x 3.0))
+(assert (<= y 3.0))
+(assert (>= y 3.0))
+(assert (or (not (= x y)) (< z 0.0)))
+(assert (> z 1.0))
+(check-sat)
+""",
+}
+
+# theory_lra bound propagations with premises, including fractional weights.
+LEGACY_BOUND_INPUTS = {
+    "bound_offset": """\
+(declare-const x Real)
+(declare-const y Real)
+(declare-const z Real)
+(assert (= (+ (* 2.0 x) z) 2.0))
+(assert (= (+ (* 2.0 y) z) 2.0))
+(assert (not (= x y)))
+(check-sat)
+""",
+    "bound_search": """\
+(declare-const x Real)
+(declare-const y Real)
+(declare-const z Real)
+(declare-const p Bool)
+(assert (<= (+ x (* 2.0 z)) 6.0))
+(assert (>= (+ x (* 2.0 z)) 6.0))
+(assert (<= (+ y (* 2.0 z)) 6.0))
+(assert (>= (+ y (* 2.0 z)) 6.0))
+(assert (or p (not (= x y))))
+(assert (or (not p) (> (* 3.0 z) 100.0)))
+(assert (< z 1.0))
+(check-sat)
+""",
+}
+
+
+# A numeral quotient inside a ground atom next to a conflict at level zero:
+# the sat.smt arithmetic solver logs its division axiom 2 * (1 / 2) = 1 under
+# an arith hint whose first literal is the constant true (the exporter's
+# _LRA_DIV_LOG pins the log); the clause log rejected the hint before.
+REAL_DIVISION_AXIOM = """\
+(set-logic QF_LRA)
+(declare-const x Real)
+(declare-const y Real)
+(declare-const z Real)
+(assert (< x x))
+(assert (or (< y z) (< (/ 1.0 2.0) 3.0)))
+(check-sat)
+"""
+
+
 def random_instance(seed, variables, constraints, ite=False):
     """A random QF_LRA problem; callers filter for unsat ones."""
     generator = random.Random(seed)
@@ -265,13 +349,17 @@ class TestArithmeticValidation(unittest.TestCase):
         with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "cannot contain arithmetic"):
             proof_to_lean.reconstruct(self.source, certificate)
         certificate = copy.deepcopy(self.certificate)
-        certificate["fragment"] = "qf_lia"
+        certificate["fragment"] = "qf_nia"
         with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "unsupported certificate header"):
             proof_to_lean.reconstruct(self.source, certificate)
-        # A Boolean certificate claiming the arithmetic fragment is rejected at binding.
+        # The integer fragment is a valid label, but not for Real declarations.
+        certificate["fragment"] = "qf_lia"
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "only qf_lia and qf_uflia certificates contain Int"):
+            proof_to_lean.reconstruct(self.source, certificate)
+        # A Boolean certificate claiming the arithmetic fragment declares no Real symbol.
         boolean = proof_certificate.export_certificate("(declare-const p Bool)(assert p)(assert (not p))")
         boolean["fragment"] = "qf_lra"
-        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "fragment propositional"):
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "qf_lra certificates must contain arithmetic"):
             proof_to_lean.reconstruct("(declare-const p Bool)(assert p)(assert (not p))", boolean)
         # Renaming a variable breaks the binding to the input even when the text is updated.
         renamed = self.source.replace("(declare-const z Real)", "(declare-const w Real)").replace("z)", "w)")
@@ -322,7 +410,7 @@ class TestArithmeticValidation(unittest.TestCase):
         for declaration in certificate["declarations"]:
             if declaration["name"] == "th-lemma":
                 declaration["parameters"][0] = "implied-eq"
-        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "must end in a Real equality"):
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "must end in an arithmetic equality"):
             proof_to_lean.reconstruct(self.source, certificate)
 
     def test_real_ite_is_an_opaque_linear_atom_with_classical_terms(self):
@@ -330,7 +418,7 @@ class TestArithmeticValidation(unittest.TestCase):
         certificate = proof_certificate.export_clause_log_certificate(source)
         graph = proof_to_lean._validate_graph(source, certificate)
         ite = next(i for i in range(len(graph.nodes)) if graph.kind(i) == z3.Z3_OP_ITE)
-        self.assertTrue(graph.is_real(ite))
+        self.assertTrue(graph.is_arith(ite))
         terms = {}
         self.assertEqual(proof_to_lean._linear_term(graph, ite, Fraction(2), terms), 0)
         self.assertEqual(terms, {ite: Fraction(2)})
@@ -386,6 +474,89 @@ class TestArithmeticValidation(unittest.TestCase):
             proof_to_lean.reconstruct(source, tampered)
 
 
+def flattening_rewrite_instance(variables=9):
+    """One wide disjunction Z3's rewriter flattens, with every variable bounded so that it is refuted.
+
+    The disjunction is left-nested over the lower bounds, repeats two of
+    them, has a conjunct false by a constant atom ((<= 0 0) under a not)
+    and a re-nested conjunction, then the upper bounds; with 2 * variables
+    atoms (more than proof_to_lean._NORMALIZED_REWRITE_ATOMS for nine) the
+    rewrite takes the normalized path, whose propositional lemma relates
+    the two nestings with the duplicates and the false conjunct dropped.
+    """
+    names = ["x%d" % i for i in range(variables)]
+    lows = ["(< %s 5)" % name for name in names]
+    highs = ["(> %s 7)" % name for name in names]
+    nested = lows[0]
+    for low in lows[1:]:
+        nested = "(or %s %s)" % (nested, low)
+    disjuncts = [nested, lows[0], lows[1],
+                 "(and %s (or (not (<= 0 0)) (not (<= 0 0))))" % highs[0],
+                 "(and (and %s %s) %s)" % (highs[1], highs[2], highs[3])] + highs[4:]
+    lines = ["(set-logic QF_LRA)"] + ["(declare-const %s Real)" % name for name in names]
+    lines.append("(assert (or %s))" % " ".join(disjuncts))
+    for name in names:
+        lines.extend(["(assert (>= %s 5))" % name, "(assert (<= %s 7))" % name])
+    lines.append("(check-sat)")
+    return "\n".join(lines) + "\n"
+
+
+def clock_shaped_rewrite_instance():
+    """A disjunction with the Boolean skeleton of the clocksynchro_3clocks rewrite over fresh bounds.
+
+    z3test's smtlib-sample QF_LRA clock_synchro/clocksynchro_3clocks.main_
+    invar.base.smt2 asserts a 74-way left-nested disjunction over 85
+    distinct arithmetic atoms (three symmetric groups of conjunctions
+    sharing atoms, 15 copies of one literal, three conjuncts false by a
+    constant atom, a re-nested conjunction), which Z3's rewriter flattens
+    to 48 disjuncts; grind failed on the propositional lemma relating the
+    two. Here every atom is a bound on its own variable, asserted as a
+    unit, so every disjunct is false and the input is unsat.
+    """
+    counter = [0]
+
+    def atom():
+        counter[0] += 1
+        return "(<= x%d 5)" % counter[0]
+
+    def neg(formula):
+        return "(not %s)" % formula
+
+    clocks = range(3)
+    a = [atom() for _ in range(13)]
+    g, s, h = [atom() for _ in clocks], [atom() for _ in clocks], [atom() for _ in clocks]
+    a61, a62, a63, a64, a65, a66 = (atom() for _ in range(6))
+    k67, k74, k75, k82, k83, k84 = (atom() for _ in range(6))
+    disjuncts = [neg(x) for x in a[:10]] + [neg(a[6])] + [neg(x) for x in a[10:13]] + [neg(a[6])]
+    disjuncts += ["(and (or %s %s) %s)" % (neg(g[c]), neg(atom()), neg(s[c])) for c in clocks]
+    disjuncts.append("(and (and %s %s) %s)" % (neg(g[0]), neg(g[1]), neg(g[2])))
+    disjuncts += ["(and %s (or %s %s))" % (g[c], neg(atom()), neg(atom())) for c in clocks]
+    disjuncts += ["(and (and %s %s) (or (or %s %s) %s))" % (g[c], neg(h[c]), neg(atom()), neg(atom()), neg(atom()))
+                  for c in clocks]
+    for _ in range(2):
+        disjuncts += ["(and (or %s %s) (or %s %s))" % (neg(h[c]), s[c], neg(atom()), neg(atom())) for c in clocks]
+    disjuncts += ["(and %s %s)" % (s[c], neg(atom())) for c in clocks]
+    disjuncts += ["(and %s (or %s %s))" % (s[c], neg(atom()), neg(atom())) for c in clocks]
+    disjuncts += [neg(a61)] * 3 + [neg(a62)] * 3 + [neg(a[6])] * 9
+    disjuncts += ["(and (or %s %s) %s)" % (neg(a63), neg(a64), neg(a65))] * 3
+    disjuncts.append("(and (and %s %s) %s)" % (neg(a63), neg(a63), neg(a63)))
+    disjuncts += ["(and %s (or (not (<= 0 0)) (not (<= 0 0))))" % a63] * 3
+    disjuncts += ["(and (and %s %s) (or (or %s %s) %s))" % (a63, neg(a66), neg(k67), neg(atom()), neg(atom()))
+                  for c in clocks]
+    disjuncts += ["(and (or %s %s) (or %s %s))" % (neg(a66), a65, neg(k74), neg(k75))] * 3
+    disjuncts += ["(and (or %s %s) (or %s %s))" % (neg(a66), a65, neg(atom()), neg(atom())) for c in clocks]
+    disjuncts += ["(and %s %s)" % (a65, neg(k82))] * 3
+    disjuncts += ["(and %s (or %s %s))" % (a65, neg(k83), neg(k84))] * 3
+    assertion = disjuncts[0]
+    for disjunct in disjuncts[1:]:
+        assertion = "(or %s %s)" % (assertion, disjunct)
+    lines = ["(set-logic QF_LRA)"] + ["(declare-const x%d Real)" % i for i in range(1, counter[0] + 1)]
+    lines.append("(assert %s)" % assertion)
+    lines += ["(assert (<= x%d 5))" % i for i in range(1, counter[0] + 1)]
+    lines.append("(check-sat)")
+    return "\n".join(lines) + "\n"
+
+
 @unittest.skipUnless(_z3_available(), "the z3 executable is required for the clause log")
 class TestArithmeticLeanIntegration(unittest.TestCase):
     """End-to-end: z3 clause log, certificate, Lean reconstruction, kernel check."""
@@ -419,6 +590,12 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
                 self.assertIn(_STANDARD_AXIOMS, report)
                 self.assertIn("th-lemma", certificate["rule_counts"])
 
+    def test_the_real_division_axiom_verifies(self):
+        certificate, report = self.check(REAL_DIVISION_AXIOM)
+        self.assertEqual(certificate["fragment"], "qf_lra")
+        self.assertIn(["arith"], [d["parameters"] for d in certificate["declarations"] if d["name"] == "th-lemma"])
+        self.assertIn(_STANDARD_AXIOMS, report)
+
     def test_boolean_inputs_through_the_clause_log(self):
         from test_proof_to_lean import Z3TEST_LEAN_INPUTS
         for name, source in Z3TEST_LEAN_INPUTS.items():
@@ -426,6 +603,37 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
                 source = "\n".join(line for line in source.splitlines() if "set-option" not in line) + "\n"
                 certificate, _ = self.check(source)
                 self.assertEqual(certificate["fragment"], "propositional")
+
+    def test_inputs_with_ignored_options_through_the_clause_log(self):
+        # z3test regressions kept verbatim: output, model, and search options,
+        # a named assertion with get-unsat-core, and a par-or tactic in
+        # check-sat-using are ignored; the executable sees the assertions only.
+        from test_proof_to_lean import CONFIGURED_INPUTS
+        fragments = {"3220": "propositional", "3434": "propositional", "z3.4": "propositional",
+                     "z3.5": "propositional", "core": "qf_lra", "strategy-par-or-2": "qf_lia"}
+        for name, source in CONFIGURED_INPUTS.items():
+            with self.subTest(name=name):
+                certificate, report = self.check(source)
+                self.assertEqual(certificate["fragment"], fragments[name])
+                self.assertEqual(certificate["source_smt2"], source)
+                if fragments[name] != "propositional":
+                    self.assertIn(_STANDARD_AXIOMS, report)
+        # The named (= 1 0) folds to false in the rewriter; the abs conflict
+        # needs the arithmetic solver.
+        self.assertIn("th-lemma", proof_certificate.export_clause_log_certificate(
+            CONFIGURED_INPUTS["strategy-par-or-2"])["rule_counts"])
+
+    def test_boolean_input_with_a_query_inside_a_scope_through_the_clause_log(self):
+        # z3test 3632.smt2 kept verbatim: the only check-sat sits inside
+        # (push 1), so no index is needed; the unused BitVec constant does
+        # not affect the fragment. The clause log proves it with a def-axiom
+        # and a distinct conflict (the legacy core's proof, wide rewrites, is
+        # checked in test_proof_to_lean_integration.py).
+        from test_proof_to_lean import INCREMENTAL_INPUTS
+        source, query = INCREMENTAL_INPUTS["3632"]
+        certificate, _ = self.check(source)
+        self.assertEqual((certificate["fragment"], certificate["query"], query), ("propositional", 0, 0))
+        self.assertEqual(len(certificate["assertions"]), 2)
 
     def test_implied_equality_distinct_and_unary_minus(self):
         for source in [
@@ -447,6 +655,25 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
             for name in ("lra_farkas", "lra_fractions", "lra_boolean_structure", "lra_split_assertion"):
                 with self.subTest(input=name):
                     self.check(Z3TEST_LRA_INPUTS[name])
+
+    def test_small_chunks_cut_arithmetic_lemmas_everywhere(self):
+        # Force chunk boundaries inside Farkas, gate-clause, and Rat-valued ite
+        # subproofs; every chunk must still be a closed lemma under the
+        # standard axioms, with the classical witnesses local to each lemma.
+        from test_proof_to_lean_uf import outlined_lemma_sizes, _proof_steps
+        inputs = {name: Z3TEST_LRA_INPUTS[name] for name in ("lra_boolean_structure", "lra_split_assertion")}
+        inputs.update(ITE_INPUTS)
+        with patch.object(proof_to_lean, "_OUTLINE_PROOF_STEPS", 0), \
+                patch.object(proof_to_lean, "_OUTLINE_CHUNK_STEPS", 3):
+            for name, source in inputs.items():
+                with self.subTest(input=name):
+                    certificate, report = self.check(source)
+                    self.assertIn(_STANDARD_AXIOMS, report)
+                    text = proof_to_lean.reconstruct(source, certificate)
+                    sizes = outlined_lemma_sizes(text)
+                    self.assertLessEqual(max(sizes), 3)
+                    self.assertEqual(sum(sizes), _proof_steps(certificate))
+                    self.assertNotIn("refute_with_decidable", text)
 
     def test_normalized_rewrites_are_checked_atom_by_atom(self):
         with patch.object(proof_to_lean, "_NORMALIZED_REWRITE_ATOMS", 0):
@@ -482,6 +709,51 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
         self.assertNotIn("of_decide_eq_true", text)
         with tempfile.TemporaryDirectory() as directory:
             proof_to_lean.check_and_write(source, certificate, Path(directory) / "checked.lean")
+
+    def _normalized_lemma(self, source):
+        certificate = proof_certificate.export_clause_log_certificate(source)
+        text = proof_to_lean.reconstruct(source, certificate)
+        self.assertEqual(text.count("private theorem normalized_rewrite_"), 1)
+        return text.split("private theorem normalized_rewrite_", 1)[1].split("\n\n", 1)[0]
+
+    def test_normalized_rewrites_are_proved_by_propagation_with_grind_as_the_fallback(self):
+        # The propositional lemma of a normalized rewrite is a direct term
+        # over the let-named structures (case analysis on the assumed
+        # disjunction, propagation, the constant atoms' values: here a
+        # conjunct under (Not True) is dropped, duplicates and the nesting
+        # of or and and change), with grind as the `first` fallback; with
+        # the prover disabled the lemma is grind alone, and Lean proves this
+        # small instance either way.
+        source = flattening_rewrite_instance()
+        lemma = self._normalized_lemma(source)
+        self.assertIn("(Not True)", lemma)
+        self.assertIn("  by first\n    | (let _s0 : Prop := ", lemma)
+        self.assertIn("\n       refine Iff.intro (fun (_f1 : _s", lemma)
+        self.assertTrue(lemma.endswith(")\n    | grind (splits := 64)"), lemma[-200:])
+        self.assertNotIn("Classical.em", lemma)
+        self.check(source)
+        with patch.object(proof_to_lean._PropositionalProver, "equivalence", lambda self, left, right: None):
+            lemma = self._normalized_lemma(source)
+            self.assertIn("  by grind (splits := 64)", lemma)
+            self.assertNotIn("Iff.intro", lemma)
+            self.check(source)
+
+    def test_clock_shaped_flattening_rewrite_verifies(self):
+        # The skeleton of the clocksynchro_3clocks rewrite (see
+        # clock_shaped_rewrite_instance): the direct term proves it where
+        # `grind (splits := 64)` failed on the same lemma, and the whole
+        # certificate verifies; the term stays far below the character
+        # budget with the structures let-named (it exhausted the budget
+        # after a thousand steps with every step stating its proposition,
+        # and the step budget when splitting on atoms instead of the
+        # disjunction's cases).
+        source = clock_shaped_rewrite_instance()
+        lemma = self._normalized_lemma(source)
+        self.assertIn("  by first\n    | (let _s0 : Prop := ", lemma)
+        self.assertGreaterEqual(lemma.count("(_atom84 : Prop)"), 1)
+        self.assertNotIn("Classical.em", lemma)
+        self.assertLess(len(lemma), proof_to_lean._STRUCTURAL_REWRITE_CHARS // 2)
+        self.check(source)
 
     def test_euf_congruence_annotation_cannot_supply_a_missing_equality(self):
         source = ("(declare-const x Real)(declare-const y Real)"
@@ -552,10 +824,42 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
     def test_random_instances_with_ite_terms(self):
         self.check_random_unsat_instances(ite=True)
 
-    def check_random_unsat_instances(self, ite):
+    def test_long_arithmetic_refutation_is_outlined_by_default(self):
+        # The first random ite instance above the threshold is outlined without
+        # any override: chunk cuts fall inside Farkas and Rat-valued ite
+        # subproofs, and the classical witnesses stay local to each lemma.
+        # Trimmed logs of the 6-variable instances stay below the threshold.
+        from test_proof_to_lean_uf import outlined_lemma_sizes, _proof_steps
+        for seed in range(1, 200):
+            source = random_instance(seed, 10, 30, ite=True)
+            if "(ite " not in source:
+                continue
+            context = z3.Context()
+            solver = z3.Solver(ctx=context)
+            solver.add(z3.parse_smt2_string(source, ctx=context))
+            if solver.check() != z3.unsat:
+                continue
+            certificate = proof_certificate.export_clause_log_certificate(source)
+            steps = sum(1 for node in certificate["nodes"]
+                        if certificate["declarations"][node["declaration"]]["range"] == "Proof")
+            if steps > proof_to_lean._OUTLINE_PROOF_STEPS:
+                break
+        else:
+            self.fail("no random ite instance exceeds the outlining threshold")
+        certificate, report = self.check(source)
+        self.assertIn(_STANDARD_AXIOMS, report)
+        text = proof_to_lean.reconstruct(source, certificate)
+        sizes = outlined_lemma_sizes(text)
+        self.assertGreater(len(sizes), 1)
+        self.assertLessEqual(max(sizes), proof_to_lean._OUTLINE_CHUNK_STEPS)
+        self.assertEqual(sum(sizes), _proof_steps(certificate))
+        self.assertIn("Classical.propDecidable", text)
+        self.assertNotIn("refute_with_decidable", text)
+
+    def check_random_unsat_instances(self, ite, core="clause-log", count=3, variables=6, constraints=14):
         checked = 0
         for seed in range(1, 200):
-            source = random_instance(seed, 6, 14, ite)
+            source = random_instance(seed, variables, constraints, ite)
             if ite and "(ite " not in source:
                 continue
             context = z3.Context()
@@ -564,12 +868,12 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
             if solver.check() != z3.unsat:
                 continue
             with self.subTest(seed=seed):
-                certificate, _ = self.check(source)
+                certificate, _ = self.check(source, core)
                 self.assertIn("th-lemma", certificate["rule_counts"])
             checked += 1
-            if checked == 3:
+            if checked == count:
                 break
-        self.assertEqual(checked, 3)
+        self.assertEqual(checked, count)
 
     def test_tampered_clauses_never_publish_a_proof(self):
         source = Z3TEST_LRA_INPUTS["lra_farkas"]
@@ -599,6 +903,261 @@ class TestArithmeticLeanIntegration(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 proof_to_lean.check_and_write(source, tampered, output)
             self.assertFalse(output.exists())
+
+
+def _th_lemma_parameters(certificate, node):
+    return certificate["declarations"][certificate["nodes"][node]["declaration"]]["parameters"]
+
+
+class TestLegacyArithmeticValidation(unittest.TestCase):
+    """Certificates from the smt core's proof object: th-lemma steps with premises, checked before Lean."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.source = Z3TEST_LRA_INPUTS["lra_farkas"]
+        cls.certificate = proof_certificate.export_certificate(cls.source)
+        cls.text = proof_to_lean.reconstruct(cls.source, cls.certificate)
+
+    def test_th_lemmas_with_premises_are_implications_applied_to_their_steps(self):
+        certificate = self.certificate
+        self.assertEqual(certificate["fragment"], "qf_lra")
+        conflicts = [node for node in _th_lemma_nodes(certificate)
+                     if _th_lemma_parameters(certificate, node)[0] == "farkas"
+                     and certificate["nodes"][node]["arguments"][:-1]]
+        self.assertTrue(conflicts)
+        for node in conflicts:
+            premises = certificate["nodes"][node]["arguments"][:-1]
+            parameters = _th_lemma_parameters(certificate, node)
+            self.assertEqual(parameters[0], "farkas")
+            self.assertEqual(len(parameters) - 1, len(premises))  # a conflict concludes false: no clause literals
+            self.assertRegex(self.text, (
+                r"private theorem th_lemma_%d \(_atoms : Nat -> Prop\) \(_vars : Nat -> Rat\)\n"
+                r"    : (\(formula_\d+ _atoms _vars\) -> ){%d}\(formula_\d+ _atoms _vars\) := by\n"
+                r"  unfold [^\n]*\n  grind") % (node, len(premises)))
+            self.assertIn("(th_lemma_%d _atoms _vars%s)" % (node, "".join(" _step_%d" % p for p in premises)), self.text)
+        # Congruence through an arithmetic operator or comparison is a grind
+        # lemma taking the argument equalities as premises; Boolean congruence
+        # keeps its explicit terms.
+        self.assertRegex(self.text, r"private theorem monotonicity_\d+ \(_atoms : Nat -> Prop\) \(_vars : Nat -> Rat\)\n"
+                                    r"    : \(formula_\d+ _atoms _vars\) -> \(formula_\d+ _atoms _vars\) := by")
+        self.assertRegex(self.text, r"\(monotonicity_\d+ _atoms _vars _step_\d+\)")
+        self.assertIn("theorem unsat (_atoms : Nat -> Prop) (_vars : Nat -> Rat)", self.text)
+        self.assertNotIn("sorry", self.text)
+        self.assertNotIn("axiom ", self.text)
+
+    def test_tampered_legacy_coefficients_are_rejected_before_lean(self):
+        node = next(n for n in _th_lemma_nodes(self.certificate)
+                    if _th_lemma_parameters(self.certificate, n)[0] == "farkas"
+                    and self.certificate["nodes"][n]["arguments"][:-1])
+        declaration = self.certificate["nodes"][node]["declaration"]
+        parameters = _th_lemma_parameters(self.certificate, node)
+        for mutate, message in [
+            (lambda p: p[:1] + [str(Fraction(p[1]) * 2)] + p[2:], "do not refute"),
+            (lambda p: p[:-1], "coefficients for"),
+            (lambda p: p + ["1"], "coefficients for"),
+            (lambda p: ["bound"] + p[1:-1] + [str(Fraction(p[-1]) * 3)], "do not refute"),
+            (lambda p: ["triangle-eq"], "without premises"),
+            (lambda p: ["implied-eq"], "must end in an arithmetic equality"),
+        ]:
+            tampered = copy.deepcopy(self.certificate)
+            tampered["declarations"][declaration]["parameters"] = mutate(list(parameters))
+            with self.subTest(parameters=tampered["declarations"][declaration]["parameters"]):
+                with self.assertRaisesRegex(proof_to_lean.ReconstructionError, message):
+                    proof_to_lean.reconstruct(self.source, tampered)
+        # Dropping a premise leaves the declaration's arity unsatisfied.
+        tampered = copy.deepcopy(self.certificate)
+        tampered["nodes"][node]["arguments"] = tampered["nodes"][node]["arguments"][1:]
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "wrong number of arguments"):
+            proof_to_lean.reconstruct(self.source, tampered)
+        # A premise that is not an arithmetic atom (a step concluding a Boolean
+        # equivalence) cannot enter the combination.
+        tampered = copy.deepcopy(self.certificate)
+        declarations, nodes = tampered["declarations"], tampered["nodes"]
+        arguments = list(nodes[node]["arguments"])
+        equivalence = next(
+            index for index, raw in enumerate(nodes[:node])
+            if declarations[raw["declaration"]]["range"] == "Proof"
+            and declarations[nodes[raw["arguments"][-1]]["declaration"]]["kind"] == z3.Z3_OP_EQ
+            and declarations[nodes[nodes[raw["arguments"][-1]]["arguments"][0]]["declaration"]]["range"] == "Bool")
+        arguments[0] = equivalence
+        nodes[node]["arguments"] = arguments
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "not a linear arithmetic atom"):
+            proof_to_lean.reconstruct(self.source, tampered)
+
+    def test_bound_propagations_weight_premises_then_the_consequent(self):
+        for name, source in LEGACY_BOUND_INPUTS.items():
+            with self.subTest(name=name):
+                certificate = proof_certificate.export_certificate(source)
+                bounds = [node for node in _th_lemma_nodes(certificate)
+                          if _th_lemma_parameters(certificate, node)[0] == "bound"]
+                self.assertTrue(bounds)
+                for node in bounds:
+                    premises = certificate["nodes"][node]["arguments"][:-1]
+                    self.assertTrue(premises)
+                    parameters = _th_lemma_parameters(certificate, node)
+                    self.assertEqual(len(parameters) - 1, len(premises) + 1)
+                    self.assertEqual(parameters[-1], "1")
+                    self.assertTrue(all(Fraction(c) > 0 for c in parameters[1:]))
+                text = proof_to_lean.reconstruct(source, certificate)
+                self.assertIn("private theorem th_lemma_", text)
+                node = bounds[0]
+                tampered = copy.deepcopy(certificate)
+                parameters = list(_th_lemma_parameters(certificate, node))
+                parameters[1] = str(Fraction(parameters[1]) / 7)
+                tampered["declarations"][tampered["nodes"][node]["declaration"]]["parameters"] = parameters
+                with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "do not refute"):
+                    proof_to_lean.reconstruct(source, tampered)
+
+    def test_refined_bounds_carry_coefficients(self):
+        # smt.arith.propagation_mode=2 lets theory_lra assert fresh bound
+        # literals (refine_bound), which are justified like every other LP
+        # bound propagation: no bare (_ th-lemma arith) reaches the proof.
+        z3.set_param("smt.arith.propagation_mode", 2)
+        try:
+            sources = {**Z3TEST_LRA_INPUTS, **LEGACY_BOUND_INPUTS}
+            sources.update(("random%d" % seed, random_instance(seed, 6, 14)) for seed in range(40))
+            for name, source in sources.items():
+                context = z3.Context()
+                solver = z3.Solver(ctx=context)
+                solver.add(z3.parse_smt2_string(source, ctx=context))
+                if solver.check() != z3.unsat:
+                    continue
+                with self.subTest(name=name):
+                    certificate = proof_certificate.export_certificate(source)
+                    for node in _th_lemma_nodes(certificate):
+                        parameters = _th_lemma_parameters(certificate, node)
+                        self.assertIn(parameters[0], ("farkas", "bound", "triangle-eq", "smt", "implied-eq"))
+                        if parameters[0] == "bound":
+                            self.assertEqual(parameters[-1], "1")
+                    proof_to_lean.reconstruct(source, certificate)
+        finally:
+            z3.set_param("smt.arith.propagation_mode", 1)
+
+    def test_difference_logic_inputs_use_bound_propagations_from_premises(self):
+        # theory_arith's assign-bounds and eq-propagate conventions are
+        # exercised on constructed declarations in test_proof_certificate.py;
+        # the direct smt core path proves these inputs with theory_lra.
+        source = LEGACY_THEORY_ARITH_INPUTS["dl_fixed_zero"]
+        certificate = proof_certificate.export_certificate(source)
+        graph = proof_to_lean._validate_graph(source, certificate)
+        hints = {_th_lemma_parameters(certificate, node)[0] for node in _th_lemma_nodes(certificate)}
+        self.assertIn("bound", hints)
+        self.assertLessEqual(hints, {"bound", "farkas", "triangle-eq"})
+        propagations = 0
+        for node in _th_lemma_nodes(certificate):
+            parameters = _th_lemma_parameters(certificate, node)
+            if parameters[0] == "triangle-eq":
+                continue
+            premises = certificate["nodes"][node]["arguments"][:-1]
+            literals = list(graph.clause(graph.conclusion(node)))
+            self.assertEqual(len(parameters) - 1, len(premises) + len(literals))
+            self.assertTrue(all(Fraction(c) > 0 for c in parameters[1:]))
+            if parameters[0] == "bound":
+                # The propagated bound is a unit clause with the weight 1 for
+                # the consequent after one weight per premise.
+                self.assertTrue(premises)
+                self.assertEqual(len(literals), 1)
+                self.assertEqual(parameters[-1], "1")
+                propagations += 1
+        self.assertTrue(propagations)
+        proof_to_lean.reconstruct(source, certificate)
+
+    def test_triangle_eq_shape_is_checked(self):
+        source = "(declare-const x Real)(declare-const y Real)(declare-const z Real)(assert (distinct x y z))(assert (<= x y))(assert (<= y x))"
+        certificate = proof_certificate.export_certificate(source)
+        nodes = [node for node in _th_lemma_nodes(certificate) if _th_lemma_parameters(certificate, node) == ["triangle-eq"]]
+        self.assertTrue(nodes)
+        proof_to_lean.reconstruct(source, certificate)
+        node = nodes[0]
+        clause = certificate["nodes"][node]["arguments"][-1]
+        equality_literals = [arg for arg in certificate["nodes"][clause]["arguments"]
+                             if certificate["declarations"][certificate["nodes"][arg]["declaration"]]["kind"] == z3.Z3_OP_EQ]
+        self.assertEqual(len(equality_literals), 1)
+        tampered = copy.deepcopy(certificate)
+        tampered["nodes"][clause]["arguments"] = [arg for arg in tampered["nodes"][clause]["arguments"]
+                                                  if arg not in equality_literals]
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "exactly one Real equality"):
+            proof_to_lean.reconstruct(source, tampered)
+        tampered = copy.deepcopy(certificate)
+        tampered["declarations"][tampered["nodes"][node]["declaration"]]["parameters"] = ["triangle-eq", "1"]
+        with self.assertRaisesRegex(proof_to_lean.ReconstructionError, "takes no coefficients"):
+            proof_to_lean.reconstruct(source, tampered)
+
+    def test_ite_terms_are_certified_without_definitions(self):
+        # The frontend's tactic preamble used to name ite terms by intro-def,
+        # a definition the certificate cannot tie to the input; the smt core
+        # reached directly keeps the ite terms and proves their gate clauses
+        # as def-axioms.
+        for name, source in ITE_INPUTS.items():
+            with self.subTest(name=name):
+                certificate = proof_certificate.export_certificate(source)
+                self.assertNotIn("intro-def", certificate["rule_counts"])
+                self.assertIn("def-axiom", certificate["rule_counts"])
+                self.assertNotIn("!", json.dumps(certificate["declarations"]))
+                proof_to_lean.reconstruct(source, certificate)
+
+
+class TestLegacyArithmeticLeanIntegration(unittest.TestCase):
+    """End-to-end through the smt core's proof object: certificate, Lean reconstruction, kernel check."""
+
+    check = TestArithmeticLeanIntegration.check
+    check_random_unsat_instances = TestArithmeticLeanIntegration.check_random_unsat_instances
+
+    def test_lp_input_without_its_logical_premise_never_publishes_a_proof(self):
+        source = Z3TEST_LRA_INPUTS["lra_farkas"]
+        certificate = proof_certificate.export_certificate(source)
+        node = next(node for node in _th_lemma_nodes(certificate)
+                    if _th_lemma_parameters(certificate, node) == ["smt"]
+                    and len(certificate["nodes"][node]["arguments"]) == 2)
+        raw = certificate["nodes"][node]
+        raw["arguments"] = raw["arguments"][-1:]
+        certificate["declarations"][raw["declaration"]]["domain"] = ["Bool"]
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "checked.lean"
+            with self.assertRaises(subprocess.CalledProcessError) as error:
+                proof_to_lean.check_and_write(source, certificate, output)
+            self.assertIn("`grind` failed", error.exception.stdout)
+            self.assertFalse(output.exists())
+
+    def test_documented_lra_inputs_verify_through_the_legacy_core(self):
+        # Real ite terms included: the smt core reached directly keeps them
+        # (no intro-def) and proves their gate clauses as def-axioms.
+        inputs = {**Z3TEST_LRA_INPUTS, **ITE_INPUTS, **ITE_REWRITTEN_INPUTS}
+        for name, source in inputs.items():
+            with self.subTest(name=name):
+                certificate, report = self.check(source, core="legacy")
+                self.assertEqual(certificate["fragment"], "qf_lra")
+                self.assertIn(_STANDARD_AXIOMS, report)
+                if name in Z3TEST_LRA_INPUTS:
+                    self.assertIn("rewrite", certificate["rule_counts"])  # the preprocessing the clause log never sees
+
+    def test_the_real_division_axiom_input_verifies_through_the_legacy_core(self):
+        certificate, report = self.check(REAL_DIVISION_AXIOM, core="legacy")
+        self.assertEqual(certificate["fragment"], "qf_lra")
+        self.assertIn(_STANDARD_AXIOMS, report)
+
+    def test_bound_propagations_and_theory_arith_inputs_verify(self):
+        for name, source in {**LEGACY_BOUND_INPUTS, **LEGACY_THEORY_ARITH_INPUTS}.items():
+            with self.subTest(name=name):
+                certificate, report = self.check(source, core="legacy")
+                self.assertIn(_STANDARD_AXIOMS, report)
+                self.assertIn("th-lemma", certificate["rule_counts"])
+
+    def test_random_instances_through_the_legacy_core(self):
+        self.check_random_unsat_instances(ite=False, core="legacy", count=4, variables=10, constraints=30)
+
+    def test_small_chunks_cut_every_legacy_lemma_shape(self):
+        from test_proof_to_lean_uf import outlined_lemma_sizes, _proof_steps
+        with patch.object(proof_to_lean, "_OUTLINE_PROOF_STEPS", 0), \
+                patch.object(proof_to_lean, "_OUTLINE_CHUNK_STEPS", 3):
+            for name in ("lra_boolean_structure", "lra_equality", "bound_offset", "dl_cycle_bool"):
+                source = {**Z3TEST_LRA_INPUTS, **LEGACY_BOUND_INPUTS, **LEGACY_THEORY_ARITH_INPUTS}[name]
+                with self.subTest(input=name):
+                    certificate, report = self.check(source, core="legacy")
+                    self.assertIn(_STANDARD_AXIOMS, report)
+                    sizes = outlined_lemma_sizes(proof_to_lean.reconstruct(source, certificate))
+                    self.assertLessEqual(max(sizes), 3)
+                    self.assertEqual(sum(sizes), _proof_steps(certificate))
 
 
 if __name__ == "__main__":

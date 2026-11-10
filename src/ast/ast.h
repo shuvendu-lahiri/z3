@@ -278,6 +278,7 @@ public:
     void del_eh(ast_manager & m);
 
     family_id get_family_id() const { return m_family_id; }
+
     decl_kind get_decl_kind() const { return m_kind; }
     bool is_decl_of(family_id fid, decl_kind k) const { return m_family_id == fid && k == m_kind; }
     unsigned get_num_parameters() const { return m_parameters.size(); }
@@ -1073,6 +1074,7 @@ class decl_plugin {
 protected:
     ast_manager * m_manager = nullptr;
     family_id     m_family_id = null_family_id;
+    bool          m_has_sorts = false;
 
     virtual void set_manager(ast_manager * m, family_id id) {
         SASSERT(m_manager == nullptr);
@@ -1103,6 +1105,9 @@ public:
     virtual decl_plugin * mk_fresh() = 0;
 
     family_id get_family_id() const { return m_family_id; }
+
+    // Conservative fast path, including sorts created by AST translation.
+    bool has_sorts() const { return m_has_sorts; }
 
     virtual sort * mk_sort(decl_kind k, unsigned num_parameters, parameter const * parameters) = 0;
 
@@ -1246,10 +1251,10 @@ protected:
     func_decl * m_iff_oeq_decl = nullptr;
     func_decl * m_skolemize_decl = nullptr;
     func_decl * m_mp_oeq_decl = nullptr;
-    func_decl * m_assumption_add_decl = nullptr;
-    func_decl * m_lemma_add_decl = nullptr;
-    func_decl * m_th_assumption_add_decl = nullptr;
-    func_decl * m_th_lemma_add_decl = nullptr;
+    ptr_vector<func_decl> m_assumption_add_decls;
+    ptr_vector<func_decl> m_lemma_add_decls;
+    ptr_vector<func_decl> m_th_assumption_add_decls;
+    ptr_vector<func_decl> m_th_lemma_add_decls;
     func_decl * m_redundant_del_decl = nullptr;
     ptr_vector<func_decl> m_apply_def_decls;
     ptr_vector<func_decl> m_nnf_pos_decls;

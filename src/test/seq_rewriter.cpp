@@ -24,6 +24,10 @@ Tests:
  27. Solver: seq.nth_i on a concat with an ite of unequal-length-1 branches
      followed by unit elements resolves to the correct element (regression
      for a refutational soundness bug, issue #10621)
+ 28. Solver: sequence-valued ite branch equalities reach the sequence theory
+     (issue #11268)
+ 29. last_indexof uses element positions, including symbolic-length prefixes
+     (issue #11327)
 --*/
 
 #include "ast/arith_decl_plugin.h"
@@ -36,6 +40,7 @@ Tests:
 #include "smt/smt_context.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Build a single-char string literal expression.
 static expr_ref mk_str(ast_manager& m, seq_util& su, unsigned c) {
@@ -130,6 +135,73 @@ static void tst_nested_sequence_assumptions() {
             ENSURE(ctx.check(1, second) == l_false);
             ctx.pop(2);
             ENSURE(ctx.check(1, second) == l_true);
+        }
+    }
+}
+
+static void tst_extract_length_products() {
+    ast_manager m;
+    reg_decl_plugins(m);
+    seq_util su(m);
+    arith_util a(m);
+    th_rewriter rw(m);
+    expr_ref one(a.mk_int(1), m);
+    app_ref count(m.mk_const("count", a.mk_int()), m);
+    for (bool is_string : {true, false}) {
+        sort_ref seq_sort(is_string ? su.str.mk_string_sort() : su.str.mk_seq(a.mk_int()), m);
+        app_ref s(m.mk_const("s", seq_sort), m);
+        app_ref t(m.mk_const("t", seq_sort), m);
+        expr_ref len(su.str.mk_length(s), m);
+        expr_ref empty(su.str.mk_empty(seq_sort), m);
+        for (unsigned power : {1u, 2u, 3u}) {
+            for (unsigned coefficient : {1u, 2u, 11u}) {
+                expr_ref offset(a.mk_int(coefficient), m);
+                for (unsigned i = 0; i < power; ++i)
+                    offset = a.mk_mul(offset, len);
+                expr* sizes[] = {one, count};
+                for (expr* size : sizes) {
+                    expr_ref extracted(su.str.mk_substr(s, offset, size), m);
+                    rw(extracted);
+                    ENSURE(extracted == empty);
+                }
+            }
+        }
+
+        expr_ref other_len(su.str.mk_length(t), m);
+        expr_ref square(a.mk_mul(len, len), m);
+        expr_ref shifted(a.mk_sub(square, one), m);
+        expr_ref_vector offsets(m);
+        offsets.push_back(a.mk_mul(len, other_len));
+        offsets.push_back(a.mk_mul(len, count));
+        offsets.push_back(a.mk_mul(a.mk_int(0), len));
+        offsets.push_back(shifted);
+        expr_ref value(is_string ? su.str.mk_string("a") : su.str.mk_unit(one), m);
+        for (expr* offset : offsets) {
+            expr_ref extracted(su.str.mk_substr(s, offset, one), m);
+            rw(extracted);
+            ENSURE(extracted != empty);
+            smt_params sp;
+            smt::context ctx(m, sp);
+            ctx.assert_expr(m.mk_eq(s, value));
+            ctx.assert_expr(m.mk_eq(t, empty));
+            ctx.assert_expr(m.mk_eq(count, a.mk_int(0)));
+            ctx.assert_expr(m.mk_eq(extracted, value));
+            ENSURE(ctx.check() == l_true);
+        }
+
+        if (is_string) {
+            expr_ref extracted(su.str.mk_substr(s, square, len), m);
+            expr_ref regex(su.re.mk_to_re(extracted), m);
+            regex = su.re.mk_plus(regex);
+            expr_ref digits(su.str.mk_itos(len), m);
+            expr_ref membership(su.re.mk_in_re(digits, regex), m);
+            for (unsigned seed : {0u, 1u, 10u}) {
+                smt_params sp;
+                sp.m_random_seed = seed;
+                smt::context ctx(m, sp);
+                ctx.assert_expr(membership);
+                ENSURE(ctx.check() == l_false);
+            }
         }
     }
 }
@@ -268,7 +340,79 @@ static void tst_length_coherence_guards() {
     ENSURE(ctx.check() == l_true);
 }
 
+static void tst_seq_index_empty_pattern() {
+    ast_manager m;
+    reg_decl_plugins(m);
+    seq_util su(m);
+    arith_util a(m);
+    th_rewriter rw(m);
+    expr_ref empty(su.str.mk_string(zstring("")), m);
+
+    for (char const* text : {"", "a"}) {
+        expr_ref haystack(su.str.mk_string(zstring(text)), m);
+        for (char const* offset : {"-4294967296", "-1", "0", "1", "2",
+                                  "4294967295", "4294967296", "18446744073709551616"}) {
+            rational index(offset);
+            expr_ref start(a.mk_int(index), m);
+            expr_ref result(su.str.mk_index(haystack, empty, start), m);
+            rw(result);
+            rational actual;
+            rational expected = index.is_nonneg() && index <= rational(zstring(text).length()) ?
+                index : rational(-1);
+            ENSURE(a.is_numeral(result, actual) && actual == expected);
+        }
+
+        app_ref start(m.mk_const("i", a.mk_int()), m);
+        expr_ref result(su.str.mk_index(haystack, empty, start), m);
+        expr_ref lower(a.mk_le(a.mk_int(0), start), m);
+        expr_ref upper(a.mk_le(start, a.mk_int(zstring(text).length())), m);
+        expr_ref condition(m.mk_and(lower, upper), m);
+        expr_ref expected(m.mk_ite(condition, start, a.mk_int(-1)), m);
+        rw(result);
+        rw(expected);
+        ENSURE(result == expected);
+    }
+}
+
+static void tst_seq_last_index() {
+    ast_manager m;
+    reg_decl_plugins(m);
+    seq_util su(m);
+    arith_util a(m);
+    th_rewriter rw(m);
+
+    auto check = [&](expr* haystack, expr* needle, expr* expected) {
+        expr_ref result(su.str.mk_last_index(haystack, needle), m);
+        expr_ref normalized(expected, m);
+        rw(result);
+        rw(normalized);
+        ENSURE(result == normalized);
+    };
+
+    expr_ref ten(su.str.mk_unit(a.mk_int(10)), m);
+    expr_ref twenty(su.str.mk_unit(a.mk_int(20)), m);
+    expr_ref thirty(su.str.mk_unit(a.mk_int(30)), m);
+    expr_ref sequence(su.str.mk_concat(ten, twenty), m);
+    check(sequence, twenty, a.mk_int(1));
+    check(sequence, ten, a.mk_int(0));
+
+    expr_ref repeated(su.str.mk_concat(sequence, sequence, ten), m);
+    expr_ref pattern(su.str.mk_concat(sequence, ten), m);
+    check(repeated, pattern, a.mk_int(2));
+
+    sort_ref seq_int(su.str.mk_seq(a.mk_int()), m);
+    app_ref p(m.mk_const("p", seq_int), m);
+    expr_ref prefix(su.str.mk_concat(p, ten), m);
+    expr_ref needle(su.str.mk_concat(p, twenty), m);
+    expr_ref position(a.mk_add(su.str.mk_length(p), a.mk_int(1)), m);
+    check(su.str.mk_concat(prefix, needle), needle, position);
+    check(su.str.mk_concat(prefix, needle, thirty), needle, position);
+}
+
 void tst_seq_rewriter() {
+    tst_seq_index_empty_pattern();
+    tst_seq_last_index();
+    tst_extract_length_products();
     tst_eq_skolem_arity();
     tst_nested_extract_prefix_of_suffix();
     tst_length_coherence_guards();
@@ -873,6 +1017,32 @@ void tst_seq_rewriter() {
         lbool res = ctx.check();
         std::cout << "self-referential seq.extract with ite branch sat: " << res << "\n";
         ENSURE(res == l_true);
+    }
+
+    // -----------------------------------------------------------------------
+    // 28. A sequence-valued ite must participate in sequence equality
+    //     propagation (issue #11268).
+    // -----------------------------------------------------------------------
+    {
+        arith_util a_util(m);
+        sort* int_sort = a_util.mk_int();
+        sort* seq_int_sort = su.str.mk_seq(int_sort);
+        app_ref h(m.mk_fresh_const("h", seq_int_sort), m);
+        app_ref x(m.mk_fresh_const("x", seq_int_sort), m);
+        app_ref k(m.mk_fresh_const("k", int_sort), m);
+        expr_ref at(su.str.mk_at(x, k), m);
+        expr_ref a(su.str.mk_concat(h, at), m);
+        sort* domain[] = { seq_int_sort };
+        func_decl_ref p(m.mk_func_decl(symbol("P"), 1, domain, m.mk_bool_sort()), m);
+        expr_ref p_a(m.mk_app(p.get(), a.get()), m);
+        expr_ref condition(a_util.mk_lt(k, a_util.mk_int(0)), m);
+        expr_ref ite(m.mk_ite(condition, h, a), m);
+        expr_ref not_p_ite(m.mk_not(m.mk_app(p.get(), ite.get())), m);
+
+        smt_params sp;
+        smt::context ctx(m, sp);
+        ctx.assert_expr(m.mk_and(p_a, not_p_ite));
+        ENSURE(ctx.check() == l_false);
     }
 
     // A sequence of length at most one contains only itself and the empty sequence.

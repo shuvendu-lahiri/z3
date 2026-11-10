@@ -99,6 +99,34 @@ let rec all_distinct (#value:eqtype) (vs:list value) : bool =
   | [] -> true
   | x :: rest -> all_distinct_from x rest && all_distinct rest
 
+(* The semantic predicate also applies to domains without decidable
+   equality, including the checker's function-valued array domain. *)
+let rec distinct_from (#a:Type) (x:a) (rest:list a) : Tot prop (decreases rest) =
+  match rest with
+  | [] -> True
+  | y :: ys -> ~(x == y) /\ distinct_from x ys
+
+let rec distinct_values (#a:Type) (vs:list a) : Tot prop (decreases vs) =
+  match vs with
+  | [] -> True
+  | x :: xs -> distinct_from x xs /\ distinct_values xs
+
+let rec lemma_all_distinct_from_spec (#a:eqtype) (x:a) (xs:list a)
+  : Lemma (all_distinct_from x xs <==> distinct_from x xs)
+          (decreases xs) =
+  match xs with
+  | [] -> ()
+  | _ :: rest -> lemma_all_distinct_from_spec x rest
+
+let rec lemma_all_distinct_spec (#a:eqtype) (xs:list a)
+  : Lemma (all_distinct xs <==> distinct_values xs)
+          (decreases xs) =
+  match xs with
+  | [] -> ()
+  | x :: rest ->
+    lemma_all_distinct_from_spec x rest;
+    lemma_all_distinct_spec rest
+
 (* ----------------------------------------------------------------- *)
 (* Boolean evaluation                                                   *)
 (* ----------------------------------------------------------------- *)
@@ -116,7 +144,7 @@ let rec all_distinct (#value:eqtype) (vs:list value) : bool =
    modeled as Z3 actually represents them, n-ary (not fixed arity 2),
    via the sibling `eval_and`/`eval_or`. *)
 let rec eval_bool (#value:eqtype) (i:interpretation value) (to_bool:value -> bool) (e:expr) (rho:env value)
-  : Tot bool (decreases e)
+  : GTot bool (decreases e)
   = match e with
     | Var _ _ -> to_bool (eval i e rho)
     | Quantifier _ _ _ _ -> to_bool (eval i e rho)
@@ -149,13 +177,13 @@ let rec eval_bool (#value:eqtype) (i:interpretation value) (to_bool:value -> boo
       else to_bool (eval i e rho)
 
 and eval_and (#value:eqtype) (i:interpretation value) (to_bool:value -> bool) (args:list expr) (rho:env value)
-  : Tot bool (decreases args)
+  : GTot bool (decreases args)
   = match args with
     | [] -> true
     | a :: rest -> eval_bool i to_bool a rho && eval_and i to_bool rest rho
 
 and eval_or (#value:eqtype) (i:interpretation value) (to_bool:value -> bool) (args:list expr) (rho:env value)
-  : Tot bool (decreases args)
+  : GTot bool (decreases args)
   = match args with
     | [] -> false
     | a :: rest -> eval_bool i to_bool a rho || eval_or i to_bool rest rho

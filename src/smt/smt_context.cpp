@@ -127,10 +127,6 @@ namespace smt {
                 th->updt_params();
     }
 
-    unsigned context::relevancy_lvl() const {
-        return std::min(m_relevancy_lvl, m_fparams.m_relevancy_lvl);
-    }
-
     void context::copy(context& src_ctx, context& dst_ctx, bool override_base) {
         ast_manager& dst_m = dst_ctx.get_manager();
         ast_manager& src_m = src_ctx.get_manager();
@@ -285,6 +281,13 @@ namespace smt {
         bool_var_data & d          = get_bdata(l.var());
         set_justification(l.var(), d, j);
         d.m_scope_lvl              = m_scope_lvl;
+        if (m_fparams.m_clause_proof && j.get_kind() == b_justification::JUSTIFICATION) {
+            literal_vector antecedents;
+            justification* reason = j.get_justification();
+            if (!m.proofs_enabled())
+                m_conflict_resolution->justification2literals(reason, antecedents);
+            m_clause_proof.propagate(l, reason, antecedents);
+        }
         if (m_fparams.m_restart_adaptive && d.m_phase_available) {
             m_agility             *= m_fparams.m_agility_factor;
             if (!decision && d.m_phase == l.sign())
@@ -1830,8 +1833,9 @@ namespace smt {
 
     /**
        \brief unit propagation.
-       Cancelation is not safe during propagation at base level because
+       Cancelation is not safe during Boolean and equality propagation at base level because
        congruences cannot be retracted to a consistent state.
+       Theory propagation must remain interruptible.
      */
     bool context::propagate() {
         TRACE(propagate, tout << "propagating... " << m_qhead << ":" << m_assigned_literals.size() << "\n");
@@ -1858,9 +1862,9 @@ namespace smt {
                 propagate_th_diseqs();
                 if (inconsistent())
                     return false;
-                if (!propagate_theories())
-                    return false;
             }
+            if (!propagate_theories())
+                return false;
             if (!get_cancel_flag()) {
 //                scoped_suspend_rlimit _suspend_cancel(m.limit(), at_base_level());
                 m_qmanager->propagate();
@@ -1931,15 +1935,18 @@ namespace smt {
             return true;
         switch (m_fparams.m_phase_selection) {
         case PS_THEORY:
-            if (m_phase_cache_on && d.m_phase_available) {
-                return m_bdata[var].m_phase;
-            }
-            if (!m_phase_cache_on && d.is_theory_atom()) {
+            // A theory atom takes the phase that holds in the current theory model, so that
+            // the decision does not disturb the model (for arithmetic: no pivots, no conflict).
+            // Other variables use their saved phase.
+            if (d.is_theory_atom()) {
                 theory * th = m_theories.get_plugin(d.get_theory());
                 lbool th_phase = th->get_phase(var);
                 if (th_phase != l_undef) {
                     return th_phase == l_true;
                 }
+            }
+            if (d.m_phase_available) {
+                return m_bdata[var].m_phase;
             }
             if (track_occs()) {
                 if (m_lit_occs[l.index()] == 0) {
@@ -2607,6 +2614,7 @@ namespace smt {
 
             m_scope_lvl = new_lvl;
             if (new_lvl < m_base_lvl) {
+                m_clause_proof.pop(m_base_lvl - new_lvl);
                 m_base_lvl = new_lvl;
                 m_search_lvl = new_lvl; // Remark: not really necessary
             }
@@ -2672,7 +2680,7 @@ namespace smt {
             literal l = cls[i];
             switch(get_assignment(l)) {
             case l_false:
-                if (m.proofs_enabled())
+                if (m.proofs_enabled() && !m_fparams.m_clause_proof)
                     simp_lits.push_back(~l);
                 dec_ref(l);
                 break;
@@ -2698,7 +2706,7 @@ namespace smt {
             return true;
         }
 
-        if (m.proofs_enabled() && !simp_lits.empty()) {
+        if (m.proofs_enabled() && !m_fparams.m_clause_proof && !simp_lits.empty()) {
             SASSERT(m_scope_lvl == m_base_lvl);
             justification * js = cls.get_justification();
             justification * new_js = nullptr;
@@ -2745,7 +2753,11 @@ namespace smt {
                         // it is safe to replace with axiom, we are at the base level.
                         SASSERT(m_scope_lvl == m_base_lvl);
                         bool_var v0 = l0.var();
-                        if (m.proofs_enabled()) {
+                        if (m_fparams.m_clause_proof) {
+                            m_clause_proof.add(l0, CLS_LEARNED, nullptr);
+                            m_bdata[v0].set_axiom();
+                        }
+                        else if (m.proofs_enabled()) {
                             SASSERT(m_search_lvl == m_base_lvl);
                             literal_buffer simp_lits;
                             unsigned num_lits = cls->get_num_literals();
@@ -3157,6 +3169,7 @@ namespace smt {
             VERIFY(!resolve_conflict()); // build the proof
         }
         push_scope();
+        m_clause_proof.push();
         m_base_scopes.push_back(base_scope());
         base_scope & bs = m_base_scopes.back();
         bs.m_lemmas_lim = m_lemmas.size();
@@ -4480,7 +4493,7 @@ namespace smt {
             }
 #endif
             proof * pr = nullptr;
-            if (m.proofs_enabled()) {
+            if (m.proofs_enabled() && !m_fparams.m_clause_proof) {
                 pr = m_conflict_resolution->get_lemma_proof();
                 // check_proof(pr);
                 TRACE(context_proof, tout << mk_ll_pp(pr, m););
@@ -4553,7 +4566,7 @@ namespace smt {
             }
 #endif
             justification * js = nullptr;
-            if (m.proofs_enabled()) {
+            if (m.proofs_enabled() && !m_fparams.m_clause_proof) {
                 js = alloc(justification_proof_wrapper, *this, pr, false);
             }
 #if 0
@@ -4601,7 +4614,7 @@ namespace smt {
             update_phase_cache_counter();
             return true;
         }
-        else if (m_fparams.m_clause_proof && !m.proofs_enabled()) {
+        else if (m_fparams.m_clause_proof) {
             m_unsat_proof = m_clause_proof.get_proof(inconsistent());
         }
         else if (m.proofs_enabled()) {
@@ -4951,6 +4964,11 @@ namespace smt {
     }
 
     proof * context::get_proof() {        
+        if (m_fparams.m_clause_proof && m_unsat_proof &&
+            !is_app_of(m_unsat_proof, basic_family_id, PR_CLAUSE_TRAIL)) {
+            m_clause_proof.add(m_unsat_proof);
+            m_unsat_proof = m_clause_proof.get_proof(inconsistent());
+        }
         if (!m_unsat_proof) {
             m_unsat_proof = m_clause_proof.get_proof(inconsistent());
         }

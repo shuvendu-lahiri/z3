@@ -57,6 +57,9 @@ void arith_rewriter::get_param_descrs(param_descrs & r) {
 }
 
 br_status arith_rewriter::mk_app_core(func_decl * f, unsigned num_args, expr * const * args, expr_ref & result) {
+    if (m_util.is_complex(f->get_range()) ||
+        f->get_decl_kind() == OP_REAL_PART || f->get_decl_kind() == OP_IMAG_PART)
+        return mk_complex_app(f, num_args, args, result);
     br_status st = BR_FAILED;
     SASSERT(f->get_family_id() == get_fid());
     switch (f->get_decl_kind()) {
@@ -103,6 +106,71 @@ br_status arith_rewriter::mk_app_core(func_decl * f, unsigned num_args, expr * c
            if (is_app(result)) tout << "args: " << to_app(result)->get_num_args() << "\n";
            );
     return st;
+}
+
+br_status arith_rewriter::mk_complex_app(func_decl* f, unsigned n, expr* const* args, expr_ref& result) {
+    auto part = [&](expr* z, bool imaginary) -> expr_ref {
+        if (m_util.is_real(z))
+            return expr_ref(imaginary ? m_util.mk_real(0) : z, m);
+        if (m_util.is_complex_constructor(z))
+            return expr_ref(to_app(z)->get_arg(imaginary ? 1 : 0), m);
+        return expr_ref(imaginary ? m_util.mk_imag_part(z) : m_util.mk_real_part(z), m);
+    };
+    decl_kind k = f->get_decl_kind();
+    if (k == OP_COMPLEX)
+        return BR_FAILED;
+    if (k == OP_REAL_PART || k == OP_IMAG_PART) {
+        bool im = k == OP_IMAG_PART;
+        if (m_util.is_complex_constructor(args[0])) {
+            result = to_app(args[0])->get_arg(im ? 1 : 0);
+            return BR_DONE;
+        }
+        if (m.is_ite(args[0])) {
+            app* t = to_app(args[0]);
+            expr_ref x = part(t->get_arg(1), im);
+            expr_ref y = part(t->get_arg(2), im);
+            result = m.mk_ite(t->get_arg(0), x, y);
+            return BR_REWRITE_FULL;
+        }
+        return BR_FAILED;
+    }
+    if (n == 0)
+        return BR_FAILED;
+    expr_ref re = part(args[0], false);
+    expr_ref im = part(args[0], true);
+    if (k == OP_UMINUS) {
+        re = m_util.mk_uminus(re);
+        im = m_util.mk_uminus(im);
+    }
+    else {
+        for (unsigned i = 1; i < n; ++i) {
+            expr_ref x = part(args[i], false);
+            expr_ref y = part(args[i], true);
+            if (k == OP_ADD || k == OP_SUB) {
+                re = k == OP_ADD ? m_util.mk_add(re, x) : m_util.mk_sub(re, x);
+                im = k == OP_ADD ? m_util.mk_add(im, y) : m_util.mk_sub(im, y);
+            }
+            else if (k == OP_MUL || k == OP_DIV) {
+                expr_ref rx(m_util.mk_mul(re, x), m);
+                expr_ref iy(m_util.mk_mul(im, y), m);
+                expr_ref ry(m_util.mk_mul(re, y), m);
+                expr_ref ix(m_util.mk_mul(im, x), m);
+                re = k == OP_MUL ? m_util.mk_sub(rx, iy) : m_util.mk_add(rx, iy);
+                im = k == OP_MUL ? m_util.mk_add(ry, ix) : m_util.mk_sub(ix, ry);
+                if (k == OP_DIV) {
+                    expr_ref xx(m_util.mk_mul(x, x), m);
+                    expr_ref yy(m_util.mk_mul(y, y), m);
+                    expr_ref den(m_util.mk_add(xx, yy), m);
+                    re = m_util.mk_div(re, den);
+                    im = m_util.mk_div(im, den);
+                }
+            }
+            else
+                return BR_FAILED;
+        }
+    }
+    result = m_util.mk_complex(re, im);
+    return BR_REWRITE_FULL;
 }
 
 void arith_rewriter::get_coeffs_gcd(expr * t, numeral & g, bool & first, unsigned & num_consts) {
@@ -272,8 +340,7 @@ bool arith_rewriter::is_non_negative(expr* e) {
         return true;
     if (!m_util.is_mul(e)) 
         return false;
-    expr_mark mark;
-    ptr_buffer<expr> args;
+    ptr_buffer<expr> args, factors;
     flat_mul(e, args);
     bool sign = false;
     for (expr* arg : args) {
@@ -281,28 +348,38 @@ bool arith_rewriter::is_non_negative(expr* e) {
             continue;
         if (is_power_of_positive(arg))
             continue;
-        if (seq().str.is_length(e))
+        if (seq().str.is_length(arg))
             continue;
         if (m_util.is_numeral(arg, r)) {
             if (r.is_neg()) 
                 sign = !sign;
             continue;
         }
-        mark.mark(arg, !mark.is_marked(arg));
+        factors.push_back(arg);
     }
     if (sign)
         return false;
 
+    // factors that occur an odd number of times, found by sorting instead of
+    // an expr_mark: a fresh mark is zero-filled up to the largest id it sees,
+    // which made this check cost time proportional to the size of the ast table
+    // for every product in every inequality.
+    std::sort(factors.begin(), factors.end(), [](expr* a, expr* b) { return a->get_id() < b->get_id(); });
+    ptr_buffer<expr> odd_args;
+    for (unsigned i = 0; i < factors.size(); ) {
+        unsigned j = i;
+        while (j < factors.size() && factors[j] == factors[i]) 
+            ++j;
+        if ((j - i) % 2 == 1)
+            odd_args.push_back(factors[i]);
+        i = j;
+    }
+    if (odd_args.empty())
+        return true;
+
     // For integer products, check if unpaired factors form consecutive pairs.
     // x * (x + 1) >= 0 for all integers since no integer lies strictly between -1 and 0.
     if (m_util.is_int(e)) {
-        expr_mark seen;
-        ptr_buffer<expr> odd_args;
-        for (expr* arg : args)
-            if (mark.is_marked(arg) && !seen.is_marked(arg)) {
-                seen.mark(arg, true);
-                odd_args.push_back(arg);
-            }
         if (odd_args.size() == 2) {
             auto is_succ = [&](expr* a, expr* b) {
                 if (!m_util.is_add(b))
@@ -325,11 +402,7 @@ bool arith_rewriter::is_non_negative(expr* e) {
                 return true;
         }
     }
-
-    for (expr* arg : args) 
-        if (mark.is_marked(arg)) 
-            return false;
-    return true;
+    return false;
 }
 
 /**
@@ -867,6 +940,16 @@ bool arith_rewriter::is_arith_term(expr * n) const {
 }
 
 br_status arith_rewriter::mk_eq_core(expr * arg1, expr * arg2, expr_ref & result) {
+    if (m_util.is_complex(arg1)) {
+        expr_ref r1(m_util.mk_real_part(arg1), m);
+        expr_ref r2(m_util.mk_real_part(arg2), m);
+        expr_ref i1(m_util.mk_imag_part(arg1), m);
+        expr_ref i2(m_util.mk_imag_part(arg2), m);
+        expr_ref re(m.mk_eq(r1, r2), m);
+        expr_ref im(m.mk_eq(i1, i2), m);
+        result = m.mk_and(re, im);
+        return BR_REWRITE_FULL;
+    }
     br_status st = BR_FAILED;
     if (m_eq2ineq) {
         {
@@ -881,7 +964,7 @@ br_status arith_rewriter::mk_eq_core(expr * arg1, expr * arg2, expr_ref & result
     }
 
     if (st == BR_FAILED && mk_eq_mod(arg1, arg2, result)) 
-        st = BR_REWRITE2;
+        st = BR_REWRITE_FULL;
     return st;
 }
 
@@ -910,9 +993,72 @@ br_status arith_rewriter::mk_and_core(unsigned n, expr* const* args, expr_ref& r
     return BR_FAILED;
 }
 
+static rational symmod(rational const& a, rational const& b) {
+    rational r = mod(a, b);
+    if (2*r > b) r -= b;
+    return r;
+}
+
 bool arith_rewriter::mk_eq_mod(expr* arg1, expr* arg2, expr_ref& result) {
     expr* x = nullptr, *y = nullptr, *z = nullptr, *u = nullptr;
     rational p, k, l;
+    if (m_util.is_numeral(arg1) && m_util.is_mod(arg2))
+        std::swap(arg1, arg2);
+    if (m_util.is_mod(arg1, x, y) && m_util.is_numeral(y, p) &&
+        m_util.is_numeral(arg2, l) && 0 <= l && l < p && m_util.is_add(x)) {
+        ptr_buffer<expr> terms;
+        vector<rational> coeffs;
+        rational offset(0), cost(0), inverse(1);
+        for (expr* arg : *to_app(x)) {
+            if (m_util.is_numeral(arg, k))
+                offset += k;
+            else {
+                terms.push_back(get_power_product(arg, k));
+                coeffs.push_back(k);
+                cost += abs(k);
+            }
+        }
+        // Only invert a coefficient when the total coefficient magnitude decreases.
+        hashtable<rational, rational::hash_proc, rational::eq_proc> candidates;
+        for (auto const& coeff : coeffs) {
+            // Bound the search to avoid quadratic work on large sums.
+            if (cost <= rational(coeffs.size()) || candidates.size() == 32)
+                break;
+            if (!m.inc())
+                return false;
+            if (coeff.is_one() || coeff.is_minus_one() || candidates.contains(coeff))
+                continue;
+            candidates.insert(coeff);
+            rational a, b;
+            if (gcd(p, coeff, a, b) != 1)
+                continue;
+            rational new_cost(0);
+            for (auto const& c : coeffs) {
+                if (!m.inc())
+                    return false;
+                new_cost += abs(symmod(b * c, p));
+                if (new_cost >= cost)
+                    break;
+            }
+            if (new_cost < cost) {
+                cost = new_cost;
+                inverse = b;
+            }
+        }
+        if (inverse != 1) {
+            expr_ref_vector args(m);
+            for (unsigned i = 0; i < terms.size(); ++i) {
+                rational c = symmod(inverse * coeffs[i], p);
+                if (!c.is_zero())
+                    args.push_back(m_util.mk_mul(m_util.mk_int(c), terms[i]));
+            }
+            expr_ref sum(m_util.mk_add(args.size(), args.data()), m);
+            expr_ref lhs(m_util.mk_mod(sum, y), m);
+            expr_ref rhs(m_util.mk_int(mod(inverse * (l - offset), p)), m);
+            result = m.mk_eq(lhs, rhs);
+            return true;
+        }
+    }
     // match k*u mod p = l, where k, p, l are integers
     if (m_util.is_mod(arg1, x, y) && m_util.is_numeral(y, p) &&
         m_util.is_mul(x, z, u) && m_util.is_numeral(z, k) &&
@@ -1435,12 +1581,6 @@ void arith_rewriter::remove_divisor(expr* d, ptr_buffer<expr>& args) {
     } 
     UNREACHABLE(); 
 } 
-
-static rational symmod(rational const& a, rational const& b) {
-    rational r = mod(a, b);
-    if (2*r > b) r -= b;
-    return r;
-}
 
 br_status arith_rewriter::mk_mod_core(expr * arg1, expr * arg2, expr_ref & result) {
     set_curr_sort(arg1->get_sort());
@@ -2269,12 +2409,13 @@ expr * arith_rewriter::mk_sin_value(rational const & k) {
 
 br_status arith_rewriter::mk_sin_core(expr * arg, expr_ref & result) {
     expr * m, *x;
-    if (m_util.is_asin(arg, x)) {
-        // sin(asin(x)) == x
+    rational k;
+    if (m_util.is_asin(arg, x) && is_numeral(x, k) && k >= rational(-1) && k <= rational(1)) {
+        // sin(asin(x)) == x for -1 <= x <= 1
         result = x;
         return BR_DONE;
     }
-    if (m_util.is_acos(arg, x)) {
+    if (m_util.is_acos(arg, x) && is_numeral(x, k) && k >= rational(-1) && k <= rational(1)) {
         {
             auto _seq2265_0 = m_util.mk_real(1);
             auto _seq2265_1 = m_util.mk_mul(x, x);
@@ -2284,7 +2425,6 @@ br_status arith_rewriter::mk_sin_core(expr * arg, expr_ref & result) {
         }
         return BR_REWRITE_FULL;
     }
-    rational k;
     if (is_numeral(arg, k) && k.is_zero()) {
         // sin(0) == 0
         result = arg;
@@ -2333,8 +2473,9 @@ br_status arith_rewriter::mk_sin_core(expr * arg, expr_ref & result) {
 
 br_status arith_rewriter::mk_cos_core(expr * arg, expr_ref & result) {
     expr* x;
-    if (m_util.is_acos(arg, x)) {
-        // cos(acos(x)) == x
+    rational k;
+    if (m_util.is_acos(arg, x) && is_numeral(x, k) && k >= rational(-1) && k <= rational(1)) {
+        // cos(acos(x)) == x for -1 <= x <= 1
         result = x;
         return BR_DONE;
     }
@@ -2342,7 +2483,6 @@ br_status arith_rewriter::mk_cos_core(expr * arg, expr_ref & result) {
         // cos(asin(x)) == ...
     }
 
-    rational k;
     if (is_numeral(arg, k) && k.is_zero()) {
         // cos(0) == 1
         result = m_util.mk_numeral(rational(1), false);
@@ -2615,8 +2755,9 @@ br_status arith_rewriter::mk_sinh_core(expr * arg, expr_ref & result) {
 
 br_status arith_rewriter::mk_cosh_core(expr * arg, expr_ref & result) {
     expr* t;
-    if (m_util.is_acosh(arg, t)) {
-        // cosh(acosh(t)) == t
+    rational k;
+    if (m_util.is_acosh(arg, t) && is_numeral(t, k) && k >= rational(1)) {
+        // cosh(acosh(t)) == t for t >= 1
         result = t;
         return BR_DONE;
     }
@@ -2630,8 +2771,9 @@ br_status arith_rewriter::mk_cosh_core(expr * arg, expr_ref & result) {
 
 br_status arith_rewriter::mk_tanh_core(expr * arg, expr_ref & result) {
     expr * t;
-    if (m_util.is_atanh(arg, t)) {
-        // tanh(atanh(t)) == t
+    rational k;
+    if (m_util.is_atanh(arg, t) && is_numeral(t, k) && k > rational(-1) && k < rational(1)) {
+        // tanh(atanh(t)) == t for -1 < t < 1
         result = t;
         return BR_DONE;
     }

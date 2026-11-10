@@ -430,7 +430,8 @@ namespace sat {
             }
             // if an input clause is simplified, then log the simplified version as learned
             if (m_config.m_drat && old_sz > num_lits) {
-                drat_log_clause(num_lits, lits, st);
+                drat_log_clause(num_lits, lits,
+                                !m_ext && st.is_asserted() ? status::redundant() : st);
                 logged = true;
             }
 
@@ -2825,10 +2826,13 @@ namespace sat {
         }
         reset_unmark(old_size);
         if (m_core.size() > 1) {
+            // An assumption true at level 0 is implied by the clauses and is
+            // dropped. An assumption false at level 0 contradicts the clauses
+            // and stays in the core.
             unsigned j = 0;
-            for (unsigned i = 0; i < m_core.size(); ++i) {
-                if (lvl(m_core[i]) > 0) m_core[j++] = m_core[i];            
-            }
+            for (literal lit : m_core)
+                if (lvl(lit) > 0 || value(lit) == l_false)
+                    m_core[j++] = lit;
             m_core.shrink(j);
         }
 

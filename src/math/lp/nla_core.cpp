@@ -10,6 +10,7 @@ Author:
     Nikolaj Bjorner (nbjorner)
 
 --*/
+#include <exception>
 #include "util/uint_set.h"
 #include "math/lp/nla_core.h"
 #include "math/lp/factorization_factory_imp.h"
@@ -134,6 +135,8 @@ bool core::canonize_sign(const factorization& f) const {
 }
 
 void core::add_monic(lpvar v, unsigned sz, lpvar const* vs) {
+    if (lra.dep_manager().proofs_enabled())
+        lra.dep_manager().register_monomial(v, sz, vs);
     m_add_buffer.resize(sz);
     for (unsigned i = 0; i < sz; ++i) {
         m_add_buffer[i] = vs[i];
@@ -628,11 +631,12 @@ lemma_builder& lemma_builder::operator|=(ineq const& ineq) {
 }
     
 
-lemma_builder::~lemma_builder() {
+lemma_builder::~lemma_builder() noexcept(false) {
     static int i = 0;
     (void)i;
     (void)name;
-    // code for checking lemma can be added here
+    if (std::uncaught_exceptions() == 0 && c.lra.dep_manager().proofs_enabled() && !current().nlsat_assumed())
+        current().set_certificate(lemma_certificate::capture(c.lra, current()));
     if (current().is_conflict()) {
         c.m_conflicts++;
     }
@@ -1005,7 +1009,7 @@ lbool core::check(unsigned level) {
 
     // Squeeze monomial bounds eagerly while it helps, otherwise on the horner
     // cadence; disable after too many fruitless calls.
-    bool squeeze_cadence = lp_settings().stats().m_nla_calls % params().arith_nl_horner_frequency() == 0;
+    bool squeeze_cadence = lp_settings().stats().m_nla_calls % horner_frequency() == 0;
     if (no_effect() && m_squeeze_schedule.enabled() && (run_horner || run_grobner) && (m_squeeze_schedule.eager() || squeeze_cadence)) {
         m_squeeze_schedule.on_squeeze(m_monomial_bounds.optimize_nl_bounds());
         if (m_to_refine.empty())
