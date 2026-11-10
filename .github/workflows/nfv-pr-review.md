@@ -93,7 +93,7 @@ safe-outputs:
         - uses: actions/setup-python@v7.0.0
           with:
             python-version: "3.12"
-        - run: python -m pip install ./nfv-plugin ./nfv-plugin/workflow
+        - run: python -m pip install "./nfv-plugin[inference]" ./nfv-plugin/workflow
         - uses: actions/download-artifact@v8.0.1
           with:
             name: nfv-evidence-${{ inputs.pr_number }}-${{ inputs.merge_sha }}
@@ -248,7 +248,7 @@ post-steps:
       overwrite: true
       path: /tmp/gh-aw/sandbox/agent/logs/nfv
       if-no-files-found: warn
-source: microsoft/neuro-formal-verification/workflow@25976a6f37a64e1f01f55e6fad4e5e39f1aae7f1
+source: microsoft/neuro-formal-verification/workflow@9adb18264bdcacdd0ab8f5f42645febdd335bd8a
 ---
 
 # NFV formal PR audit
