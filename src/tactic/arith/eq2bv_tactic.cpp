@@ -22,7 +22,6 @@ Notes:
 #include "ast/ast_pp.h"
 #include "ast/arith_decl_plugin.h"
 #include "ast/bv_decl_plugin.h"
-#include "ast/recfun_decl_plugin.h"
 #include "ast/rewriter/rewriter_def.h"
 #include "ast/ast_util.h"
 #include "ast/ast_pp_util.h"
@@ -179,11 +178,6 @@ public:
         ref<bvmc> mc1 = alloc(bvmc, m);
 
         tactic_report report("eq2bv", *g);
-
-        if (recfun::util(m).has_rec_defs()) {
-            result.push_back(g.get());
-            return;
-        }
 
         for (unsigned i = 0; i < g->size(); ++i)
             m_bounds(g->form(i), g->dep(i), g->pr(i));
