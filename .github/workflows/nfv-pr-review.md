@@ -47,6 +47,7 @@ jobs:
       copilot-requests: none
     uses: ./.github/workflows/nfv-source-context.lock.yml
     with:
+      aw_context: nfv-source-context
       pr_number: ${{ inputs.pr_number }}
       merge_sha: ${{ inputs.merge_sha }}
       base_sha: ${{ inputs.base_sha }}
@@ -245,7 +246,7 @@ post-steps:
       overwrite: true
       path: /tmp/gh-aw/sandbox/agent/logs/nfv
       if-no-files-found: warn
-source: microsoft/neuro-formal-verification/workflow@6d27ef6b5b9b958e35098813d7320b9846999983
+source: microsoft/neuro-formal-verification/workflow@c20ca2832b61469701b2bd3d1fcd73a02ded242d
 ---
 
 # NFV formal PR audit
