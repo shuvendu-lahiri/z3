@@ -141,6 +141,12 @@ let rec lemma_count_cells (#a:Type) (acc:nat) (l:list a)
 let lemma_name_length (s:string) : Lemma (name_length s == FStar.String.strlen s)
   = lemma_count_cells 0 (FStar.String.list_of_string s)
 
+(* Equal names are counted once (`Z3UnifiedProof.name_pair_units`); the units
+   are both names' lengths. *)
+let lemma_name_pair_units (a b:string)
+  : Lemma (name_pair_units a b == name_length a + name_length b)
+  = ()
+
 (* The recursive sort comparison of d50187500/0ebb92579, word for word under
    new names, proof only: as deep as the sorts on the Cherry backend. *)
 let rec sort_eq_within_rec (work:nat) (s t:sort) : Tot (option (bool & nat)) (decreases s) =
@@ -156,6 +162,8 @@ let rec sort_eq_within_rec (work:nat) (s t:sort) : Tot (option (bool & nat)) (de
        (match sort_list_eq_within_rec w d1 d2 with
         | Some (true, w') -> sort_eq_within_rec w' r1 r2
         | r -> r)
+     | SortApp k1 a1, SortApp k2 a2 ->
+       if k1 = k2 then sort_list_eq_within_rec w a1 a2 else Some (false, w)
      | _, _ -> Some (false, w))
 
 and sort_list_eq_within_rec (work:nat) (l1 l2:list sort) : Tot (option (bool & nat)) (decreases l1) =
@@ -194,6 +202,7 @@ let rec lemma_sort_tasks (work:nat) (tasks:list sort_task)
        | Some w ->
          (match s, t with
           | BaseSort a, BaseSort b ->
+            lemma_name_pair_units a b;
             (match scope_charge w (name_length a + name_length b) with
              | Some w' -> if a = b then lemma_sort_tasks w' rest
              | None -> ())
@@ -202,6 +211,8 @@ let rec lemma_sort_tasks (work:nat) (tasks:list sort_task)
             (match sort_list_eq_within_rec w d1 d2 with
              | Some (true, w') -> ()
              | _ -> ())
+          | SortApp k1 a1, SortApp k2 a2 ->
+            if k1 = k2 then lemma_sort_tasks w (SortListPair a1 a2 :: rest)
           | _, _ -> ()))
     | SortListPair l1 l2 :: rest ->
       (match scope_charge work 1 with
@@ -236,6 +247,8 @@ let rec lemma_sort_eq_within_rec (work:nat) (s t:sort)
       (match sort_list_eq_within_rec w d1 d2 with
        | Some (true, w') -> lemma_sort_eq_within_rec w' r1 r2
        | _ -> ())
+    | SortApp k1 a1, SortApp k2 a2 ->
+      if k1 = k2 then lemma_sort_list_eq_within_rec w a1 a2
     | _, _ -> ()
 
 and lemma_sort_list_eq_within_rec (work:nat) (l1 l2:list sort)
