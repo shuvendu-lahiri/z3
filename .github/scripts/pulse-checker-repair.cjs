@@ -2,10 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const BUILD_REPORTS = new Map([
-    [".github/workflows/pulse-checker-build.yml", "pulse-checker-build-report"],
-    [".github/workflows/pulse-checker-full.yml", "pulse-checker-full-report"],
-]);
+const BUILD = ".github/workflows/pulse-checker-build.yml";
 const REGRESSIONS = ".github/workflows/pulse-checker-regressions.yml";
 const WORKFLOW = "pulse-checker-repair";
 const allowedFile = /^fstar\/(?:[A-Z][A-Za-z0-9_.]*\.(?:fst|fsti)|ocaml_runtime\/[A-Za-z0-9_]+\.ml|tools\/(?:checker_modules\.json|build_(?:ocaml|cherry)_checker\.ps1|test_[A-Za-z0-9_]+\.(?:py|ml))|benchmarks\/repair\/[A-Za-z0-9_-]+\.smt2)$/;
@@ -28,7 +25,7 @@ async function producer({ github, context }) {
         ...context.repo, run_id: id,
     });
     if (run.id !== id || run.status !== "completed" ||
-        ![...BUILD_REPORTS.keys(), REGRESSIONS].includes(run.path?.split("@")[0]) ||
+        ![BUILD, REGRESSIONS].includes(run.path?.split("@")[0]) ||
         !/^[0-9a-f]{40}$/.test(run.head_sha) ||
         run.repository?.full_name?.toLowerCase() !==
             `${context.repo.owner}/${context.repo.repo}`.toLowerCase())
@@ -43,14 +40,13 @@ async function evidence({ github, context, run }) {
     const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
         ...context.repo, run_id: run.id, per_page: 100,
     });
-    const report = BUILD_REPORTS.get(run.path.split("@")[0]);
-    const names = report
-        ? [report]
+    const names = run.path.split("@")[0] === BUILD
+        ? ["pulse-checker-build-report"]
         : [
             `pulse-checker-report-${run.id}-${run.run_attempt}`,
             `pulse-checker-cherry-report-${run.id}-${run.run_attempt}`,
         ];
-    const build = Boolean(report);
+    const build = run.path.split("@")[0] === BUILD;
     const attemptStart = Date.parse(run.run_started_at);
     if (build && !Number.isFinite(attemptStart))
         throw new Error("Missing build attempt start time");
@@ -87,7 +83,7 @@ async function prepare({ github, context, core, directory, baseSha }) {
     const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
         ...context.repo, run_id: run.id, attempt_number: run.run_attempt, per_page: 100,
     });
-    const actionable = !(BUILD_REPORTS.has(run.path.split("@")[0]) && run.conclusion === "success") &&
+    const actionable = !(run.path.split("@")[0] === BUILD && run.conclusion === "success") &&
         !duplicate;
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, "context.json"), JSON.stringify({
@@ -244,8 +240,8 @@ function filePatch(filename, before, after, added) {
 async function stageBundle({ github, context, core, payload, baseSha, directory }) {
     const data = validatePayload(payload, baseSha);
     const run = await producer({ github, context });
-    if (BUILD_REPORTS.has(run.path.split("@")[0]) && run.conclusion === "success")
-        throw new Error("Successful builds are analyzed through their regression run; successful full verification needs no repair");
+    if (run.path.split("@")[0] === BUILD && run.conclusion === "success")
+        throw new Error("Successful builds are analyzed through their regression run");
     if (await existingIssue({ github, context, run })) {
         core.info("Skipping an already published producer attempt");
         return;
