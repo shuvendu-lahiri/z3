@@ -13,7 +13,6 @@ from prepare import run, SCRIPTS
 from maven_artifacts import TEST_GROUP
 from mk_java_package import LIBRARIES, json_bytes, sha256
 import maven_auto
-import maven_classifiers
 
 
 def check_resolved(paths, packages, report, classifier):
@@ -67,10 +66,6 @@ def consume(packages, platform, work, mvn, gradle=None, repository=None, group_i
     for tool in ['maven'] + (['gradle'] if gradle else []):
         for classifier in (platform, 'all') + (('auto',) if tool == 'maven' else ()):
             selected = platform if classifier == 'auto' else classifier
-            # Platform keys are .NET runtime identifiers; the repository only
-            # carries the published Maven classifier spelling.
-            published = (maven_classifiers.classifier(selected)
-                         if selected in report['platforms'] else selected)
             project = work / (tool + '-' + classifier)
             source = project / 'src/main/java'
             source.mkdir(parents=True)
@@ -78,11 +73,11 @@ def consume(packages, platform, work, mvn, gradle=None, repository=None, group_i
             coordinate = ':'.join(identity[key] for key in ('groupId', 'artifactId', 'version'))
             if tool == 'maven':
                 dependency = '<groupId>{groupId}</groupId><artifactId>{artifactId}</artifactId><version>{version}</version>'.format(**identity)
-                items = ''.join('<artifactItem>' + dependency + '<classifier>' + published + '-' + kind
+                items = ''.join('<artifactItem>' + dependency + '<classifier>' + selected + '-' + kind
                                 + '</classifier><type>jar</type></artifactItem>' for kind in ('sources', 'javadoc'))
                 requested = (('<groupId>{groupId}</groupId><artifactId>{artifactId}</artifactId>'
                               '<version>{version}</version><type>pom</type>').format(**maven_auto.identity(report))
-                             if classifier == 'auto' else dependency + '<classifier>' + published + '</classifier>')
+                             if classifier == 'auto' else dependency + '<classifier>' + classifier + '</classifier>')
                 pom = '''<project><modelVersion>4.0.0</modelVersion><groupId>invalid.z3.consumer</groupId>
 <artifactId>consumer</artifactId><version>1</version><properties><maven.compiler.release>8</maven.compiler.release>
 <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
@@ -120,8 +115,8 @@ tasks.register('resolved') {
              companions: configurations.companions.files.collect { it.absolutePath }])
     }
 }
-''' % tuple(json.dumps(value) for value in (repository.as_uri(), coordinate + ':' + published,
-                                           coordinate + ':' + published + '-sources', coordinate + ':' + published + '-javadoc'))
+''' % tuple(json.dumps(value) for value in (repository.as_uri(), coordinate + ':' + classifier,
+                                           coordinate + ':' + classifier + '-sources', coordinate + ':' + classifier + '-javadoc'))
                 (project / 'build.gradle').write_text(build, encoding='utf-8')
                 run([gradle, '--no-daemon', '--console=plain', '-p', project, 'resolved'])
                 resolution = json.loads((project / 'resolved.json').read_bytes())
@@ -129,7 +124,7 @@ tasks.register('resolved') {
                 classpath = str(jar)
                 resolved = [jar, *resolution['companions']]
                 classes = project / 'build/classes/java/main'
-            check_resolved(resolved, packages, report, published)
+            check_resolved(resolved, packages, report, selected)
             empty, temporary = project / 'empty-native-path', project / 'native-temp'
             empty.mkdir()
             temporary.mkdir()
