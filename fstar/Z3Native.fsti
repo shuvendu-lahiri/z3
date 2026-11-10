@@ -22,7 +22,6 @@ noeq
 type sort_view =
   | Base : name:string -> sort_view
   | Array : domains:list native_sort -> range:native_sort -> sort_view
-  | Applied : symbol:Z3AstTheory.sort_symbol -> arguments:list native_sort -> sort_view
 
 noeq
 type declaration = {
